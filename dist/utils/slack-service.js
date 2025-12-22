@@ -63,38 +63,133 @@ export class SlackService {
     /**
      * Sends recording link with context message (no file upload)
      */
-    async uploadRecordingWithContext(recordingUrl, callId, context) {
+    async uploadRecordingWithContext(recordingUrl, callId, assistantId, ghlMetadata, fullCallData, context) {
         try {
             Logger.info('[SLACK_SERVICE] Sending recording link to Slack', {
                 callId,
                 recordingUrl,
                 hasContext: !!context,
+                hasAssistantId: !!assistantId,
+                hasGhlMetadata: !!ghlMetadata,
+                hasFullCallData: !!fullCallData,
             });
-            // Build the main message with recording link (in English)
-            let message = `🎵 **New Call Recording Available**\n\n`;
-            message += `🆔 **Call ID:** ${callId}\n`;
-            message += `🔗 **Recording:** ${recordingUrl}\n\n`;
-            // Add context information if provided (in English)
-            if (context && Object.keys(context).length > 0) {
-                message += `📊 **Call Details:**\n`;
-                if (context.duration) {
-                    const minutes = Math.floor(context.duration / 60);
-                    const seconds = Math.floor(context.duration % 60);
-                    message += `⏱️ Duration: ${minutes}:${seconds.toString().padStart(2, '0')}\n`;
-                }
-                if (context.cost) {
-                    message += `💰 Cost: $${context.cost.toFixed(4)}\n`;
-                }
-                if (context.sentiment) {
-                    const sentimentEmoji = context.sentiment.toLowerCase().includes('positive') ? '😊' :
-                        context.sentiment.toLowerCase().includes('negative') ? '😞' : '😐';
-                    message += `${sentimentEmoji} Sentiment: ${context.sentiment}\n`;
-                }
-                if (context.summary) {
-                    message += `📝 Summary: ${context.summary}\n`;
-                }
+            // Import ClientConfigManager to get client name
+            const { ClientConfigManager } = await import('./client-config.js');
+            // Get client name from assistant ID
+            const clientName = assistantId ? ClientConfigManager.getClientName(assistantId) : 'Unknown Client';
+            // DEBUG: Log all available data structures
+            Logger.info('[SLACK_SERVICE] DEBUG - Available data structures', {
+                callId,
+                hasGhlMetadata: !!ghlMetadata,
+                hasFullCallData: !!fullCallData,
+                ghlMetadataStructure: ghlMetadata ? {
+                    keys: Object.keys(ghlMetadata),
+                    contact: ghlMetadata.contact ? {
+                        keys: Object.keys(ghlMetadata.contact),
+                        name: ghlMetadata.contact.name,
+                        firstName: ghlMetadata.contact.firstName,
+                        lastName: ghlMetadata.contact.lastName,
+                        email: ghlMetadata.contact.email,
+                    } : null,
+                    raw: JSON.stringify(ghlMetadata).substring(0, 500),
+                } : null,
+                fullCallDataStructure: fullCallData ? {
+                    keys: Object.keys(fullCallData),
+                    hasMetadata: !!fullCallData.metadata,
+                    metadataKeys: fullCallData.metadata ? Object.keys(fullCallData.metadata) : [],
+                    metadataName: fullCallData.metadata?.name,
+                    metadataEmail: fullCallData.metadata?.email,
+                    hasCustomer: !!fullCallData.customer,
+                    customerKeys: fullCallData.customer ? Object.keys(fullCallData.customer) : [],
+                    hasVariables: !!fullCallData.variables,
+                    variablesKeys: fullCallData.variables ? Object.keys(fullCallData.variables) : [],
+                    variablesName: fullCallData.variables?.name,
+                    variablesEmail: fullCallData.variables?.email,
+                    hasVariableValues: !!fullCallData.variableValues,
+                    variableValuesKeys: fullCallData.variableValues ? Object.keys(fullCallData.variableValues) : [],
+                    variableValuesName: fullCallData.variableValues?.name,
+                    variableValuesEmail: fullCallData.variableValues?.email,
+                    rawMetadata: fullCallData.metadata ? JSON.stringify(fullCallData.metadata).substring(0, 500) : null,
+                } : null,
+            });
+            // Extract lead name from multiple possible sources (priority order)
+            // 1. fullCallData.variables.name (VAPI variables - MOST COMMON)
+            // 2. fullCallData.variableValues.name (alternative location)
+            // 3. fullCallData.assistantOverrides.variableValues.name (assistant overrides)
+            // 4. ghlMetadata.contact.name (from GHL metadata)
+            // 5. fullCallData.metadata.name (from VAPI metadata directly)
+            // 6. ghlMetadata.contact.firstName + lastName (fallback)
+            let leadName = 'N/A';
+            if (fullCallData?.variables?.name) {
+                leadName = fullCallData.variables.name;
             }
-            message += `\n💡 Click the link above to listen to the recording`;
+            else if (fullCallData?.variableValues?.name) {
+                leadName = fullCallData.variableValues.name;
+            }
+            else if (fullCallData?.assistantOverrides?.variableValues?.name) {
+                leadName = fullCallData.assistantOverrides.variableValues.name;
+            }
+            else if (ghlMetadata?.contact?.name) {
+                leadName = ghlMetadata.contact.name;
+            }
+            else if (fullCallData?.metadata?.name) {
+                leadName = fullCallData.metadata.name;
+            }
+            else if (ghlMetadata?.contact?.firstName) {
+                leadName = `${ghlMetadata.contact.firstName}${ghlMetadata.contact.lastName ? ' ' + ghlMetadata.contact.lastName : ''}`;
+            }
+            // Extract email from multiple sources
+            const leadEmail = fullCallData?.variables?.email
+                || fullCallData?.variableValues?.email
+                || fullCallData?.assistantOverrides?.variableValues?.email
+                || ghlMetadata?.contact?.email
+                || fullCallData?.metadata?.email
+                || 'N/A';
+            Logger.info('[SLACK_SERVICE] DEBUG - Extracted lead info', {
+                callId,
+                leadName,
+                leadEmail,
+                nameSource: fullCallData?.variables?.name ? 'fullCallData.variables.name' :
+                    fullCallData?.variableValues?.name ? 'fullCallData.variableValues.name' :
+                        fullCallData?.assistantOverrides?.variableValues?.name ? 'fullCallData.assistantOverrides.variableValues.name' :
+                            ghlMetadata?.contact?.name ? 'ghlMetadata.contact.name' :
+                                fullCallData?.metadata?.name ? 'fullCallData.metadata.name' :
+                                    ghlMetadata?.contact?.firstName ? 'ghlMetadata.contact.firstName' : 'N/A',
+                emailSource: fullCallData?.variables?.email ? 'fullCallData.variables.email' :
+                    fullCallData?.variableValues?.email ? 'fullCallData.variableValues.email' :
+                        fullCallData?.assistantOverrides?.variableValues?.email ? 'fullCallData.assistantOverrides.variableValues.email' :
+                            ghlMetadata?.contact?.email ? 'ghlMetadata.contact.email' :
+                                fullCallData?.metadata?.email ? 'fullCallData.metadata.email' : 'N/A',
+            });
+            // Format date: YYYY-MM-DD HH:MM:SS
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+            // Build the message with exact format requested
+            let message = `<!channel> New Call Recording & Report Just Dropped\n\n`;
+            message += `**The name of the GHL account associated with the call:** ${clientName}\n\n`;
+            message += `**Lead Name:** ${leadName}\n`;
+            message += `**Email:** ${leadEmail}\n`;
+            message += `**Date:** ${formattedDate}\n\n`;
+            message += `**Call ID:** ${callId}\n\n`;
+            message += `**Call Details:**\n`;
+            if (context?.cost) {
+                message += `**Cost:** $${context.cost.toFixed(4)}\n`;
+            }
+            if (context?.duration) {
+                const durationMinutes = Math.floor(context.duration / 60);
+                const durationSeconds = Math.floor(context.duration % 60);
+                message += `**Duration:** ${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}\n`;
+            }
+            if (context?.summary) {
+                message += `**Summary:** ${context.summary}\n`;
+            }
+            message += `\n**Call recording:** ${recordingUrl}`;
             // Send the message
             await this.sendMessage({
                 channelId: this.defaultChannelId,
@@ -102,6 +197,8 @@ export class SlackService {
             });
             Logger.info('[SLACK_SERVICE] Recording link sent successfully to Slack', {
                 callId,
+                leadName,
+                leadEmail,
             });
         }
         catch (error) {

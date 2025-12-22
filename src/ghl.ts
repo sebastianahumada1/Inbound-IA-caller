@@ -7,6 +7,8 @@ import {
   AddTagArgs,
   AddNoteArgs,
   UpdateStageArgs,
+  CheckCalendarAvailabilityArgs,
+  ScheduleAppointmentArgs,
   ToolResult,
 } from './schemas.js';
 
@@ -68,6 +70,28 @@ export class GHLConnector {
       });
     }
     return defaultKey || '';
+  }
+
+  /**
+   * Get the Calendar ID based on Assistant ID
+   */
+  private getCalendarId(): string | null {
+    if (this.assistantId) {
+      const calendarId = ClientConfigManager.getCalendarId(this.assistantId);
+      if (calendarId) {
+        Logger.info('[GHL_CONNECTOR] Using client-specific calendar ID', {
+          assistantId: this.assistantId,
+          clientName: ClientConfigManager.getClientName(this.assistantId),
+          calendarId,
+        });
+        return calendarId;
+      }
+    }
+
+    Logger.warn('[GHL_CONNECTOR] No calendar ID found for assistant', {
+      assistantId: this.assistantId,
+    });
+    return null;
   }
 
   async sendSms(id: string, args: SendSmsArgs): Promise<ToolResult> {
@@ -412,6 +436,244 @@ export class GHLConnector {
       Logger.error('[GHL] Error in add_note_by_contact_id_via_api', { 
         id, 
         contactId, 
+        error: errorMessage 
+      });
+      return {
+        id,
+        ok: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs): Promise<ToolResult> {
+    try {
+      Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args });
+
+      const ghlApiKey = this.getGHLApiKey();
+      if (!ghlApiKey) {
+        const error = 'GHL_API_KEY not configured for this client';
+        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      const calendarId = this.getCalendarId();
+      if (!calendarId) {
+        const error = 'Calendar ID not configured for this client';
+        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      // Parse the requested dateTime
+      const requestedDate = new Date(args.dateTime);
+      if (isNaN(requestedDate.getTime())) {
+        const error = 'Invalid dateTime format';
+        Logger.error('[CALENDAR] ' + error, { id, dateTime: args.dateTime });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      // Calculate end time based on duration
+      const endDate = new Date(requestedDate.getTime() + (args.durationMinutes || 30) * 60000);
+
+      // Query GHL Calendar API for free slots
+      // We'll check a range around the requested time
+      const startDate = new Date(requestedDate.getTime() - 60 * 60000); // 1 hour before
+      const endDateRange = new Date(requestedDate.getTime() + 2 * 60 * 60000); // 2 hours after
+
+      const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
+      const params = new URLSearchParams({
+        startDate: startDate.toISOString(),
+        endDate: endDateRange.toISOString(),
+      });
+
+      Logger.info('[CALENDAR] Querying GHL Calendar API', {
+        id,
+        calendarId,
+        requestedTime: requestedDate.toISOString(),
+        queryRange: `${startDate.toISOString()} to ${endDateRange.toISOString()}`,
+      });
+
+      const response = await this.httpClient.get(`${apiUrl}?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${ghlApiKey}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28',
+        },
+      });
+
+      if (!response.ok) {
+        const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
+        Logger.error('[CALENDAR] ' + error, { id, responseData: response.data });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      // Check if the requested slot is available
+      const freeSlots = response.data?.slots || [];
+      const isAvailable = freeSlots.some((slot: any) => {
+        const slotStart = new Date(slot.startTime);
+        const slotEnd = new Date(slot.endTime);
+        return requestedDate >= slotStart && endDate <= slotEnd;
+      });
+
+      Logger.info('[CALENDAR] Availability check completed', {
+        id,
+        requestedTime: requestedDate.toISOString(),
+        isAvailable,
+        freeSlotsCount: freeSlots.length,
+      });
+
+      return {
+        id,
+        ok: true,
+        data: {
+          available: isAvailable,
+          requestedTime: requestedDate.toISOString(),
+          duration: args.durationMinutes || 30,
+          message: isAvailable 
+            ? 'The requested time slot is available' 
+            : 'The requested time slot is not available',
+        },
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[CALENDAR] Error in check_calendar_availability', { 
+        id, 
+        error: errorMessage 
+      });
+      return {
+        id,
+        ok: false,
+        error: errorMessage,
+      };
+    }
+  }
+
+  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs): Promise<ToolResult> {
+    try {
+      Logger.info('[CALENDAR] Processing schedule_appointment', { id, args });
+
+      const ghlApiKey = this.getGHLApiKey();
+      if (!ghlApiKey) {
+        const error = 'GHL_API_KEY not configured for this client';
+        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      const calendarId = this.getCalendarId();
+      if (!calendarId) {
+        const error = 'Calendar ID not configured for this client';
+        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      // Validate date formats
+      const startTime = new Date(args.startTime);
+      const endTime = new Date(args.endTime);
+
+      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+        const error = 'Invalid date format for startTime or endTime';
+        Logger.error('[CALENDAR] ' + error, { id, args });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      if (endTime <= startTime) {
+        const error = 'endTime must be after startTime';
+        Logger.error('[CALENDAR] ' + error, { id, args });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      // Create appointment in GHL Calendar
+      const apiUrl = `https://services.leadconnectorhq.com/calendars/events`;
+      
+      const payload = {
+        calendarId,
+        contactId: args.contactId,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        title: `Appointment with ${args.name}`,
+        appointmentStatus: 'confirmed',
+        notes: args.notes || '',
+      };
+
+      Logger.info('[CALENDAR] Creating appointment in GHL', {
+        id,
+        calendarId,
+        contactId: args.contactId,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+      });
+
+      const response = await this.httpClient.post(apiUrl, payload, {
+        headers: {
+          'Authorization': `Bearer ${ghlApiKey}`,
+          'Content-Type': 'application/json',
+          'Version': '2021-07-28',
+        },
+      });
+
+      if (response.ok) {
+        Logger.info('[CALENDAR] Appointment created successfully', { 
+          id, 
+          appointmentId: response.data?.id,
+          contactId: args.contactId,
+        });
+        return {
+          id,
+          ok: true,
+          data: {
+            appointmentId: response.data?.id,
+            calendarId,
+            contactId: args.contactId,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            message: 'Appointment scheduled successfully',
+          },
+        };
+      } else {
+        const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
+        Logger.error('[CALENDAR] ' + error, { id, responseData: response.data });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[CALENDAR] Error in schedule_appointment', { 
+        id, 
         error: errorMessage 
       });
       return {

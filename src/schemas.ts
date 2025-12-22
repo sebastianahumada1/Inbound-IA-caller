@@ -156,6 +156,19 @@ export const UpdateStageArgsSchema = z.object({
   message: "Either phone or email must be provided"
 });
 
+export const CheckCalendarAvailabilityArgsSchema = z.object({
+  dateTime: z.string().min(1),
+  durationMinutes: z.number().optional().default(30),
+});
+
+export const ScheduleAppointmentArgsSchema = z.object({
+  contactId: z.string().min(1),
+  name: z.string().min(1),
+  startTime: z.string().min(1),
+  endTime: z.string().min(1),
+  notes: z.string().optional().default(''),
+});
+
 // Response schemas
 export const ToolResultSchema = z.object({
   id: z.string(),
@@ -178,6 +191,8 @@ export type UpsertContactArgs = z.infer<typeof UpsertContactArgsSchema>;
 export type AddTagArgs = z.infer<typeof AddTagArgsSchema>;
 export type AddNoteArgs = z.infer<typeof AddNoteArgsSchema>;
 export type UpdateStageArgs = z.infer<typeof UpdateStageArgsSchema>;
+export type CheckCalendarAvailabilityArgs = z.infer<typeof CheckCalendarAvailabilityArgsSchema>;
+export type ScheduleAppointmentArgs = z.infer<typeof ScheduleAppointmentArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;
 

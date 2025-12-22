@@ -140,6 +140,17 @@ export const UpdateStageArgsSchema = z.object({
 }).refine(data => data.phone || data.email, {
     message: "Either phone or email must be provided"
 });
+export const CheckCalendarAvailabilityArgsSchema = z.object({
+    dateTime: z.string().min(1),
+    durationMinutes: z.number().optional().default(30),
+});
+export const ScheduleAppointmentArgsSchema = z.object({
+    contactId: z.string().min(1),
+    name: z.string().min(1),
+    startTime: z.string().min(1),
+    endTime: z.string().min(1),
+    notes: z.string().optional().default(''),
+});
 // Response schemas
 export const ToolResultSchema = z.object({
     id: z.string(),

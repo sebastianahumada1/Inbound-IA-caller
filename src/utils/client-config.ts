@@ -11,6 +11,7 @@ export interface ClientConfig {
   name: string;
   assistantId: string;
   ghlApiKey: string;
+  calendarId?: string;
   slackChannelId?: string;
 }
 
@@ -31,30 +32,35 @@ export class ClientConfigManager {
         name: 'Premier Wellness',
         assistantIdVar: 'PREMIER_WELLNESS_ASSISTANT_ID',
         apiKeyVar: 'PREMIER_WELLNESS_GHL_API_KEY',
+        calendarIdVar: 'PREMIER_WELLNESS_CALENDAR_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS',
       },
       {
         name: 'West Texas',
         assistantIdVar: 'WEST_TEXAS_ASSISTANT_ID',
         apiKeyVar: 'WEST_TEXAS_GHL_API_KEY',
+        calendarIdVar: 'WEST_TEXAS_CALENDAR_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS',
       },
       {
         name: 'Third Client',
         assistantIdVar: 'THIRD_CLIENT_ASSISTANT_ID',
         apiKeyVar: 'THIRD_CLIENT_GHL_API_KEY',
+        calendarIdVar: 'THIRD_CLIENT_CALENDAR_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_THIRD_CLIENT',
       },
       {
         name: 'Data Driven Practices',
         assistantIdVar: 'DATA_DRIVEN_PRACTICES_ASSISTANT_ID',
         apiKeyVar: 'DATA_DRIVEN_PRACTICES_GHL_API_KEY',
+        calendarIdVar: 'DATA_DRIVEN_PRACTICES_CALENDAR_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_DATA_DRIVEN_PRACTICES',
       },
       {
         name: 'NuVive',
         assistantIdVar: 'NUVIVE_ASSISTANT_ID',
         apiKeyVar: 'NUVIVE_GHL_API_KEY',
+        calendarIdVar: 'NUVIVE_CALENDAR_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE',
       },
     ];
@@ -85,6 +91,12 @@ export class ClientConfigManager {
         ghlApiKey: apiKey,
       };
 
+      // Add optional calendar ID if configured
+      const calendarId = process.env[clientDef.calendarIdVar];
+      if (calendarId) {
+        config.calendarId = calendarId;
+      }
+
       // Add optional Slack channel if configured
       const slackChannel = process.env[clientDef.slackChannelVar];
       if (slackChannel) {
@@ -98,6 +110,7 @@ export class ClientConfigManager {
       Logger.debug(`[CLIENT_CONFIG] Loaded configuration for ${clientDef.name}`, {
         assistantId: assistantId.substring(0, 8) + '...',
         apiKeyPrefix: apiKey.substring(0, 10) + '...',
+        hasCalendarId: !!calendarId,
         hasSlackChannel: !!slackChannel,
       });
     }
@@ -152,6 +165,14 @@ export class ClientConfigManager {
   static getClientName(assistantId: string): string {
     const config = this.getConfigByAssistantId(assistantId);
     return config?.name || 'Unknown Client';
+  }
+
+  /**
+   * Get Calendar ID by Assistant ID
+   */
+  static getCalendarId(assistantId: string): string | undefined {
+    const config = this.getConfigByAssistantId(assistantId);
+    return config?.calendarId;
   }
 
   /**

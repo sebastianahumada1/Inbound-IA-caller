@@ -14,7 +14,7 @@ export declare class SlackService {
     /**
      * Sends recording link with context message (no file upload)
      */
-    uploadRecordingWithContext(recordingUrl: string, callId: string, context?: {
+    uploadRecordingWithContext(recordingUrl: string, callId: string, assistantId?: string, ghlMetadata?: any, fullCallData?: any, context?: {
         duration?: number;
         cost?: number;
         summary?: string;

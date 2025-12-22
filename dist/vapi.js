@@ -4,7 +4,7 @@ import { Logger } from './utils/logger.js';
 import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
-import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, } from './schemas.js';
+import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, } from './schemas.js';
 export class VapiWebhookHandler {
     ghlConnector;
     vapiApiClient;
@@ -159,6 +159,10 @@ export class VapiWebhookHandler {
                     return await this.handleAddNote(id, args);
                 case 'update_stage':
                     return await this.handleUpdateStage(id, args);
+                case 'check_calendar_availability':
+                    return await this.handleCheckCalendarAvailability(id, args);
+                case 'schedule_appointment':
+                    return await this.handleScheduleAppointment(id, args);
                 default:
                     Logger.warn('Unknown tool name', { id, name });
                     return {
@@ -263,6 +267,40 @@ export class VapiWebhookHandler {
             throw error;
         }
     }
+    async handleCheckCalendarAvailability(id, args) {
+        try {
+            const validatedArgs = CheckCalendarAvailabilityArgsSchema.parse(args);
+            return await this.ghlConnector.checkCalendarAvailability(id, validatedArgs);
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                Logger.error('Invalid check_calendar_availability arguments', { id, errors: error.issues });
+                return {
+                    id,
+                    ok: false,
+                    error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+                };
+            }
+            throw error;
+        }
+    }
+    async handleScheduleAppointment(id, args) {
+        try {
+            const validatedArgs = ScheduleAppointmentArgsSchema.parse(args);
+            return await this.ghlConnector.scheduleAppointment(id, validatedArgs);
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                Logger.error('Invalid schedule_appointment arguments', { id, errors: error.issues });
+                return {
+                    id,
+                    ok: false,
+                    error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+                };
+            }
+            throw error;
+        }
+    }
     handleCallEnded(message) {
         Logger.info('Call ended', {
             callId: message.call?.id,
@@ -306,7 +344,48 @@ export class VapiWebhookHandler {
         if (recordingUrl && message.call?.id && this.slackService) {
             try {
                 Logger.info('[END_OF_CALL] Uploading recording to Slack', { callId: message.call.id });
-                await this.uploadRecordingToSlack(recordingUrl, message.call.id, {
+                // DEBUG: Log what's available in the webhook message
+                Logger.info('[END_OF_CALL] DEBUG - Webhook message data', {
+                    callId: message.call?.id,
+                    hasCallMetadata: !!message.call?.metadata,
+                    callMetadataKeys: message.call?.metadata ? Object.keys(message.call.metadata) : [],
+                    hasGhlInCallMetadata: !!message.call?.metadata?.ghl,
+                    ghlMetadataKeys: message.call?.metadata?.ghl ? Object.keys(message.call.metadata.ghl) : [],
+                    rawCallMetadata: message.call?.metadata ? JSON.stringify(message.call.metadata).substring(0, 500) : null,
+                });
+                // Try to use metadata from the webhook message first
+                let ghlMetadata = message.call?.metadata?.ghl || null;
+                let fullCallData = message.call || null;
+                Logger.info('[END_OF_CALL] Using metadata from webhook message', {
+                    callId: message.call?.id,
+                    hasMessageMetadata: !!message.call?.metadata,
+                    hasGhlInMessage: !!ghlMetadata,
+                });
+                // If not available in webhook, try pulling from API
+                if (!ghlMetadata) {
+                    try {
+                        Logger.info('[END_OF_CALL] Pulling metadata from API', { callId: message.call.id });
+                        const metadataResult = await this.pullCallMetadata(message.call.id);
+                        ghlMetadata = metadataResult.ghlMetadata;
+                        fullCallData = metadataResult.fullCall || fullCallData;
+                        Logger.info('[END_OF_CALL] DEBUG - Metadata fetched from API', {
+                            callId: message.call.id,
+                            hasGhlMetadata: !!ghlMetadata,
+                            hasFullCallData: !!fullCallData,
+                            ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
+                            fullCallDataKeys: fullCallData ? Object.keys(fullCallData) : [],
+                            fullCallMetadataKeys: fullCallData?.metadata ? Object.keys(fullCallData.metadata) : [],
+                            rawGhlMetadata: ghlMetadata ? JSON.stringify(ghlMetadata).substring(0, 500) : null,
+                        });
+                    }
+                    catch (error) {
+                        Logger.warn('[SLACK_UPLOAD] Could not fetch GHL metadata from API', {
+                            callId: message.call.id,
+                            error: error instanceof Error ? error.message : 'Unknown error',
+                        });
+                    }
+                }
+                await this.uploadRecordingToSlack(recordingUrl, message.call.id, assistantId, ghlMetadata, fullCallData, {
                     duration: message.duration,
                     cost: message.cost,
                     summary: message.analysis?.summary,
@@ -788,7 +867,7 @@ export class VapiWebhookHandler {
     /**
      * Uploads a recording to Slack with context information
      */
-    async uploadRecordingToSlack(recordingUrl, callId, context) {
+    async uploadRecordingToSlack(recordingUrl, callId, assistantId, ghlMetadata, fullCallData, context) {
         if (!this.slackService) {
             Logger.warn('[SLACK_UPLOAD] Slack service not available', { callId });
             return;
@@ -798,8 +877,11 @@ export class VapiWebhookHandler {
                 callId,
                 recordingUrl,
                 hasContext: !!context,
+                hasAssistantId: !!assistantId,
+                hasGhlMetadata: !!ghlMetadata,
+                hasFullCallData: !!fullCallData,
             });
-            await this.slackService.uploadRecordingWithContext(recordingUrl, callId, context);
+            await this.slackService.uploadRecordingWithContext(recordingUrl, callId, assistantId, ghlMetadata, fullCallData, context);
             Logger.info('[SLACK_UPLOAD] Recording uploaded successfully to Slack', {
                 callId,
             });

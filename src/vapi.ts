@@ -14,6 +14,8 @@ import {
   AddTagArgsSchema,
   AddNoteArgsSchema,
   UpdateStageArgsSchema,
+  CheckCalendarAvailabilityArgsSchema,
+  ScheduleAppointmentArgsSchema,
   ToolResult,
   WebhookResponse,
 } from './schemas.js';
@@ -209,6 +211,12 @@ export class VapiWebhookHandler {
         case 'update_stage':
           return await this.handleUpdateStage(id, args);
         
+        case 'check_calendar_availability':
+          return await this.handleCheckCalendarAvailability(id, args);
+        
+        case 'schedule_appointment':
+          return await this.handleScheduleAppointment(id, args);
+        
         default:
           Logger.warn('Unknown tool name', { id, name });
           return {
@@ -303,6 +311,40 @@ export class VapiWebhookHandler {
     } catch (error) {
       if (error instanceof ZodError) {
         Logger.error('Invalid update_stage arguments', { id, errors: error.issues });
+        return {
+          id,
+          ok: false,
+          error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+        };
+      }
+      throw error;
+    }
+  }
+
+  private async handleCheckCalendarAvailability(id: string, args: any): Promise<ToolResult> {
+    try {
+      const validatedArgs = CheckCalendarAvailabilityArgsSchema.parse(args);
+      return await this.ghlConnector.checkCalendarAvailability(id, validatedArgs);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        Logger.error('Invalid check_calendar_availability arguments', { id, errors: error.issues });
+        return {
+          id,
+          ok: false,
+          error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+        };
+      }
+      throw error;
+    }
+  }
+
+  private async handleScheduleAppointment(id: string, args: any): Promise<ToolResult> {
+    try {
+      const validatedArgs = ScheduleAppointmentArgsSchema.parse(args);
+      return await this.ghlConnector.scheduleAppointment(id, validatedArgs);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        Logger.error('Invalid schedule_appointment arguments', { id, errors: error.issues });
         return {
           id,
           ok: false,

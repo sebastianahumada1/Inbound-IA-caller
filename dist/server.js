@@ -1,10 +1,13 @@
+// ⚠️ IMPORTANT: Load environment variables FIRST, before any other imports
+// This ensures process.env is populated when modules are imported
+import dotenv from 'dotenv';
+dotenv.config();
+// Now import other modules (they can safely use process.env)
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import { VapiWebhookHandler } from './vapi.js';
 import { Logger, logRequest } from './utils/logger.js';
-// Load environment variables
-dotenv.config();
+import { ClientConfigManager } from './utils/client-config.js';
 const app = express();
 const port = process.env.PORT || 3000;
 const vapiHandler = new VapiWebhookHandler();
@@ -33,22 +36,22 @@ app.get('/', async (_req, res) => {
     // Gather all status information
     const uptime = process.uptime();
     const uptimeFormatted = `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`;
+    // Get configured clients
+    const allClients = ClientConfigManager.getAllClients();
+    const configuredClients = allClients.length;
     // Check configurations
     const configs = {
         webhookToken: !!process.env.WEBHOOK_TOKEN,
         vapiApiKey: !!process.env.VAPI_API_KEY,
         vapiApiBaseUrl: !!process.env.VAPI_API_BASE_URL,
-        ghlApiKey: !!process.env.GHL_API_KEY,
-        ghlApiKeySecondary: !!process.env.GHL_API_KEY_SECONDARY,
-        ghlApiKeyThird: !!process.env.GHL_API_KEY_THIRD,
-        ghlApiKeyFourth: !!process.env.GHL_API_KEY_FOURTH,
         ghlWebhookDefault: !!process.env.GHL_INCOMING_WEBHOOK_URL_DEFAULT,
         ghlWebhookBooking: !!process.env.GHL_INCOMING_WEBHOOK_URL_BOOKING,
         ghlWebhookDeposit: !!process.env.GHL_INCOMING_WEBHOOK_URL_DEPOSIT,
         slackBotToken: !!process.env.SLACK_BOT_TOKEN,
         slackChannelId: !!process.env.SLACK_CHANNEL_ID,
+        clientsConfigured: configuredClients,
     };
-    const configuredCount = Object.values(configs).filter(Boolean).length;
+    const configuredCount = Object.values(configs).filter(v => typeof v === 'boolean' ? v : v > 0).length;
     const totalConfigs = Object.keys(configs).length;
     const html = `
 <!DOCTYPE html>
@@ -416,34 +419,34 @@ app.get('/', async (_req, res) => {
               ${configs.vapiApiKey ? 'Configured' : 'Missing'}
             </span>
           </li>
+        </ul>
+      </div>
+      
+      <!-- Multi-Client Configuration -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon blue">👥</div>
+          <h2 class="card-title">Client Configurations (${configuredClients}/5)</h2>
+        </div>
+        <ul class="config-list">
+          ${allClients.map(client => `
           <li class="config-item">
-            <span class="config-name">GHL_API_KEY (Primary)</span>
+            <span class="config-name">${client.name}</span>
             <span class="config-status">
-              <span class="status-dot ${configs.ghlApiKey ? 'ok' : 'error'}"></span>
-              ${configs.ghlApiKey ? 'Configured' : 'Missing'}
+              <span class="status-dot ok"></span>
+              Configured
             </span>
           </li>
+          `).join('')}
+          ${configuredClients === 0 ? `
           <li class="config-item">
-            <span class="config-name">GHL_API_KEY_SECONDARY</span>
+            <span class="config-name" style="color: var(--accent-yellow);">⚠️ No clients configured</span>
             <span class="config-status">
-              <span class="status-dot ${configs.ghlApiKeySecondary ? 'ok' : 'warning'}"></span>
-              ${configs.ghlApiKeySecondary ? 'Configured' : 'Not set'}
+              <span class="status-dot warning"></span>
+              Check .env file
             </span>
           </li>
-          <li class="config-item">
-            <span class="config-name">GHL_API_KEY_THIRD</span>
-            <span class="config-status">
-              <span class="status-dot ${configs.ghlApiKeyThird ? 'ok' : 'warning'}"></span>
-              ${configs.ghlApiKeyThird ? 'Configured' : 'Not set'}
-            </span>
-          </li>
-          <li class="config-item">
-            <span class="config-name">GHL_API_KEY_FOURTH</span>
-            <span class="config-status">
-              <span class="status-dot ${configs.ghlApiKeyFourth ? 'ok' : 'warning'}"></span>
-              ${configs.ghlApiKeyFourth ? 'Configured' : 'Not set'}
-            </span>
-          </li>
+          ` : ''}
         </ul>
       </div>
       

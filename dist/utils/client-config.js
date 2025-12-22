@@ -1,3 +1,6 @@
+// Load environment variables FIRST (this module is imported early in the chain)
+import dotenv from 'dotenv';
+dotenv.config();
 import { Logger } from './logger.js';
 /**
  * Client Configuration Manager
@@ -6,53 +9,102 @@ import { Logger } from './logger.js';
 export class ClientConfigManager {
     static configs = new Map();
     /**
-     * Initialize client configurations
+     * Initialize client configurations from environment variables
      */
     static initialize() {
-        // Premier Wellness Configuration
-        const premierConfig = {
-            name: 'Premier Wellness',
-            assistantId: '053cd610-596c-4632-a90b-a1e398712178',
-            ghlApiKey: 'pit-ea7a24ba-ead3-4076-9afa-e0672c56d0f7',
-        };
-        if (process.env.SLACK_CHANNEL_ID_PREMIER_WELLNESS) {
-            premierConfig.slackChannelId = process.env.SLACK_CHANNEL_ID_PREMIER_WELLNESS;
+        // Define all clients with their environment variable names
+        const clientDefinitions = [
+            {
+                name: 'Premier Wellness',
+                assistantIdVar: 'PREMIER_WELLNESS_ASSISTANT_ID',
+                apiKeyVar: 'PREMIER_WELLNESS_GHL_API_KEY',
+                calendarIdVar: 'PREMIER_WELLNESS_CALENDAR_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS',
+            },
+            {
+                name: 'West Texas',
+                assistantIdVar: 'WEST_TEXAS_ASSISTANT_ID',
+                apiKeyVar: 'WEST_TEXAS_GHL_API_KEY',
+                calendarIdVar: 'WEST_TEXAS_CALENDAR_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS',
+            },
+            {
+                name: 'Third Client',
+                assistantIdVar: 'THIRD_CLIENT_ASSISTANT_ID',
+                apiKeyVar: 'THIRD_CLIENT_GHL_API_KEY',
+                calendarIdVar: 'THIRD_CLIENT_CALENDAR_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_THIRD_CLIENT',
+            },
+            {
+                name: 'Data Driven Practices',
+                assistantIdVar: 'DATA_DRIVEN_PRACTICES_ASSISTANT_ID',
+                apiKeyVar: 'DATA_DRIVEN_PRACTICES_GHL_API_KEY',
+                calendarIdVar: 'DATA_DRIVEN_PRACTICES_CALENDAR_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_DATA_DRIVEN_PRACTICES',
+            },
+            {
+                name: 'NuVive',
+                assistantIdVar: 'NUVIVE_ASSISTANT_ID',
+                apiKeyVar: 'NUVIVE_GHL_API_KEY',
+                calendarIdVar: 'NUVIVE_CALENDAR_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE',
+            },
+        ];
+        const missingConfigs = [];
+        const configuredClients = [];
+        // Load each client configuration from environment variables
+        for (const clientDef of clientDefinitions) {
+            const assistantId = process.env[clientDef.assistantIdVar];
+            const apiKey = process.env[clientDef.apiKeyVar];
+            // Check if both required variables are set
+            if (!assistantId || !apiKey) {
+                Logger.warn(`[CLIENT_CONFIG] Missing configuration for ${clientDef.name}`, {
+                    assistantIdSet: !!assistantId,
+                    apiKeySet: !!apiKey,
+                    requiredVars: [clientDef.assistantIdVar, clientDef.apiKeyVar],
+                });
+                missingConfigs.push(clientDef.name);
+                continue;
+            }
+            // Create client configuration
+            const config = {
+                name: clientDef.name,
+                assistantId,
+                ghlApiKey: apiKey,
+            };
+            // Add optional calendar ID if configured
+            const calendarId = process.env[clientDef.calendarIdVar];
+            if (calendarId) {
+                config.calendarId = calendarId;
+            }
+            // Add optional Slack channel if configured
+            const slackChannel = process.env[clientDef.slackChannelVar];
+            if (slackChannel) {
+                config.slackChannelId = slackChannel;
+            }
+            // Register the configuration
+            this.configs.set(assistantId, config);
+            configuredClients.push(clientDef.name);
+            Logger.debug(`[CLIENT_CONFIG] Loaded configuration for ${clientDef.name}`, {
+                assistantId: assistantId.substring(0, 8) + '...',
+                apiKeyPrefix: apiKey.substring(0, 10) + '...',
+                hasCalendarId: !!calendarId,
+                hasSlackChannel: !!slackChannel,
+            });
         }
-        this.configs.set('053cd610-596c-4632-a90b-a1e398712178', premierConfig);
-        // West Texas Configuration
-        const westTexasConfig = {
-            name: 'West Texas',
-            assistantId: '09c07269-4462-4469-96ac-c4eb06146571',
-            ghlApiKey: 'pit-71098f8f-4b2d-46fb-a5a6-c55cca460ecb',
-        };
-        if (process.env.SLACK_CHANNEL_ID_WEST_TEXAS) {
-            westTexasConfig.slackChannelId = process.env.SLACK_CHANNEL_ID_WEST_TEXAS;
+        // Log initialization summary
+        if (this.configs.size === 0) {
+            Logger.error('[CLIENT_CONFIG] No client configurations loaded! Check environment variables.', {
+                missingConfigs,
+            });
         }
-        this.configs.set('09c07269-4462-4469-96ac-c4eb06146571', westTexasConfig);
-        // Third Client Configuration
-        const thirdClientConfig = {
-            name: 'Third Client',
-            assistantId: '39ba1969-84bf-4991-ab9e-9b234178f5c2',
-            ghlApiKey: process.env.GHL_API_KEY_THIRD || 'pit-38da7913-a22e-46b4-873e-f4bb24de234b',
-        };
-        if (process.env.SLACK_CHANNEL_ID_THIRD_CLIENT) {
-            thirdClientConfig.slackChannelId = process.env.SLACK_CHANNEL_ID_THIRD_CLIENT;
+        else {
+            Logger.info('[CLIENT_CONFIG] Initialized client configurations', {
+                clientCount: this.configs.size,
+                configuredClients,
+                missingConfigs: missingConfigs.length > 0 ? missingConfigs : undefined,
+            });
         }
-        this.configs.set('39ba1969-84bf-4991-ab9e-9b234178f5c2', thirdClientConfig);
-        // Data Driven Practices Configuration
-        const dataDrivenConfig = {
-            name: 'Data Driven Practices',
-            assistantId: '30abcadf-9a7c-4db7-8e5f-3d82977f1f5d',
-            ghlApiKey: process.env.GHL_API_KEY_FOURTH || 'pit-bd654d7f-815a-4ae1-b593-62a0bc1ca497',
-        };
-        if (process.env.SLACK_CHANNEL_ID_DATA_DRIVEN_PRACTICES) {
-            dataDrivenConfig.slackChannelId = process.env.SLACK_CHANNEL_ID_DATA_DRIVEN_PRACTICES;
-        }
-        this.configs.set('30abcadf-9a7c-4db7-8e5f-3d82977f1f5d', dataDrivenConfig);
-        Logger.info('[CLIENT_CONFIG] Initialized client configurations', {
-            clientCount: this.configs.size,
-            clients: Array.from(this.configs.values()).map(c => c.name),
-        });
     }
     /**
      * Get client configuration by Assistant ID
@@ -85,6 +137,13 @@ export class ClientConfigManager {
     static getClientName(assistantId) {
         const config = this.getConfigByAssistantId(assistantId);
         return config?.name || 'Unknown Client';
+    }
+    /**
+     * Get Calendar ID by Assistant ID
+     */
+    static getCalendarId(assistantId) {
+        const config = this.getConfigByAssistantId(assistantId);
+        return config?.calendarId;
     }
     /**
      * Get Slack Channel ID by Assistant ID

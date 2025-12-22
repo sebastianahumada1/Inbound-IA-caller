@@ -1167,6 +1167,35 @@ export declare const UpdateStageArgsSchema: z.ZodEffects<z.ZodObject<{
     email?: string | undefined;
     note?: string | undefined;
 }>;
+export declare const CheckCalendarAvailabilityArgsSchema: z.ZodObject<{
+    dateTime: z.ZodString;
+    durationMinutes: z.ZodDefault<z.ZodOptional<z.ZodNumber>>;
+}, "strip", z.ZodTypeAny, {
+    dateTime: string;
+    durationMinutes: number;
+}, {
+    dateTime: string;
+    durationMinutes?: number | undefined;
+}>;
+export declare const ScheduleAppointmentArgsSchema: z.ZodObject<{
+    contactId: z.ZodString;
+    name: z.ZodString;
+    startTime: z.ZodString;
+    endTime: z.ZodString;
+    notes: z.ZodDefault<z.ZodOptional<z.ZodString>>;
+}, "strip", z.ZodTypeAny, {
+    name: string;
+    contactId: string;
+    startTime: string;
+    endTime: string;
+    notes: string;
+}, {
+    name: string;
+    contactId: string;
+    startTime: string;
+    endTime: string;
+    notes?: string | undefined;
+}>;
 export declare const ToolResultSchema: z.ZodObject<{
     id: z.ZodString;
     ok: z.ZodBoolean;
@@ -1228,5 +1257,7 @@ export type UpsertContactArgs = z.infer<typeof UpsertContactArgsSchema>;
 export type AddTagArgs = z.infer<typeof AddTagArgsSchema>;
 export type AddNoteArgs = z.infer<typeof AddNoteArgsSchema>;
 export type UpdateStageArgs = z.infer<typeof UpdateStageArgsSchema>;
+export type CheckCalendarAvailabilityArgs = z.infer<typeof CheckCalendarAvailabilityArgsSchema>;
+export type ScheduleAppointmentArgs = z.infer<typeof ScheduleAppointmentArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;

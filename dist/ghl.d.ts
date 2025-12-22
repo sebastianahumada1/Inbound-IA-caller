@@ -1,4 +1,4 @@
-import { SendSmsArgs, UpsertContactArgs, AddTagArgs, AddNoteArgs, UpdateStageArgs, ToolResult } from './schemas.js';
+import { SendSmsArgs, UpsertContactArgs, AddTagArgs, AddNoteArgs, UpdateStageArgs, CheckCalendarAvailabilityArgs, ScheduleAppointmentArgs, ToolResult } from './schemas.js';
 export declare class GHLConnector {
     private httpClient;
     private readonly defaultWebhookUrl;
@@ -14,10 +14,16 @@ export declare class GHLConnector {
      * Get the appropriate GHL API Key based on Assistant ID
      */
     private getGHLApiKey;
+    /**
+     * Get the Calendar ID based on Assistant ID
+     */
+    private getCalendarId;
     sendSms(id: string, args: SendSmsArgs): Promise<ToolResult>;
     upsertContact(id: string, args: UpsertContactArgs): Promise<ToolResult>;
     addTag(id: string, args: AddTagArgs): Promise<ToolResult>;
     addNote(id: string, args: AddNoteArgs): Promise<ToolResult>;
     updateStage(id: string, args: UpdateStageArgs): Promise<ToolResult>;
     addNoteByContactIdViaAPI(id: string, contactId: string, note: string): Promise<ToolResult>;
+    checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs): Promise<ToolResult>;
+    scheduleAppointment(id: string, args: ScheduleAppointmentArgs): Promise<ToolResult>;
 }
