@@ -62,6 +62,23 @@ export class VapiWebhookHandler {
                     errors: validationResult.error.issues,
                     body: req.body
                 });
+                // Si es un tool-calls, devolver 200 con error en el resultado
+                const messageType = req.body?.message?.type;
+                if (messageType === 'tool-calls') {
+                    const toolCalls = req.body?.message?.toolCallList || [];
+                    const errorResults = toolCalls.map((tc) => ({
+                        id: tc.id || tc.function?.name || 'unknown',
+                        ok: false,
+                        error: `Invalid request: ${validationResult.error.issues.map((i) => i.message).join(', ')}`,
+                    }));
+                    res.status(200).json({
+                        ok: false,
+                        results: errorResults,
+                        message: 'Invalid request body',
+                    });
+                    return;
+                }
+                // Para otros tipos, devolver 400
                 res.status(400).json({
                     ok: false,
                     message: 'Invalid request body',
@@ -81,6 +98,22 @@ export class VapiWebhookHandler {
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             Logger.error('Error processing webhook', { error: errorMessage });
+            // Si es tool-calls, devolver 200 con error
+            const messageType = req.body?.message?.type;
+            if (messageType === 'tool-calls') {
+                const toolCalls = req.body?.message?.toolCallList || [];
+                const errorResults = toolCalls.map((tc) => ({
+                    id: tc.id || tc.function?.name || 'unknown',
+                    ok: false,
+                    error: errorMessage,
+                }));
+                res.status(200).json({
+                    ok: false,
+                    results: errorResults,
+                    message: 'Internal server error',
+                });
+                return;
+            }
             res.status(500).json({
                 ok: false,
                 message: 'Internal server error',

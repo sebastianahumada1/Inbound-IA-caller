@@ -11,7 +11,7 @@ export const VapiToolCallSchema = z.object({
   }).optional(),
   // Soporte para formato legacy (por si acaso)
   name: z.string().optional(),
-  arguments: z.record(z.any()).optional(),
+  arguments: z.union([z.record(z.any()), z.string()]).optional(),
 }).transform((data) => {
   // Si viene en el nuevo formato con function anidado
   if (data.function) {
@@ -33,11 +33,20 @@ export const VapiToolCallSchema = z.object({
     };
   }
   
-  // Formato legacy
+  // Formato legacy - también puede tener arguments como string
+  let parsedArgs = data.arguments;
+  if (typeof parsedArgs === 'string') {
+    try {
+      parsedArgs = JSON.parse(parsedArgs);
+    } catch {
+      parsedArgs = {};
+    }
+  }
+  
   return {
     id: data.id,
     name: data.name || '',
-    arguments: data.arguments || {},
+    arguments: parsedArgs || {},
   };
 });
 

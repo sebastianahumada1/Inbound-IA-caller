@@ -13,7 +13,7 @@ export declare const VapiToolCallSchema: z.ZodEffects<z.ZodObject<{
         arguments?: any;
     }>>;
     name: z.ZodOptional<z.ZodString>;
-    arguments: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    arguments: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodString]>>;
 }, "strip", z.ZodTypeAny, {
     id: string;
     function?: {
@@ -22,7 +22,7 @@ export declare const VapiToolCallSchema: z.ZodEffects<z.ZodObject<{
     } | undefined;
     type?: string | undefined;
     name?: string | undefined;
-    arguments?: Record<string, any> | undefined;
+    arguments?: string | Record<string, any> | undefined;
 }, {
     id: string;
     function?: {
@@ -31,7 +31,7 @@ export declare const VapiToolCallSchema: z.ZodEffects<z.ZodObject<{
     } | undefined;
     type?: string | undefined;
     name?: string | undefined;
-    arguments?: Record<string, any> | undefined;
+    arguments?: string | Record<string, any> | undefined;
 }>, {
     id: string;
     name: string;
@@ -44,7 +44,7 @@ export declare const VapiToolCallSchema: z.ZodEffects<z.ZodObject<{
     } | undefined;
     type?: string | undefined;
     name?: string | undefined;
-    arguments?: Record<string, any> | undefined;
+    arguments?: string | Record<string, any> | undefined;
 }>;
 export declare const VapiToolCallsMessageSchema: z.ZodObject<{
     type: z.ZodLiteral<"tool-calls">;
@@ -62,7 +62,7 @@ export declare const VapiToolCallsMessageSchema: z.ZodObject<{
             arguments?: any;
         }>>;
         name: z.ZodOptional<z.ZodString>;
-        arguments: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        arguments: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodString]>>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         function?: {
@@ -71,7 +71,7 @@ export declare const VapiToolCallsMessageSchema: z.ZodObject<{
         } | undefined;
         type?: string | undefined;
         name?: string | undefined;
-        arguments?: Record<string, any> | undefined;
+        arguments?: string | Record<string, any> | undefined;
     }, {
         id: string;
         function?: {
@@ -80,7 +80,7 @@ export declare const VapiToolCallsMessageSchema: z.ZodObject<{
         } | undefined;
         type?: string | undefined;
         name?: string | undefined;
-        arguments?: Record<string, any> | undefined;
+        arguments?: string | Record<string, any> | undefined;
     }>, {
         id: string;
         name: string;
@@ -93,7 +93,7 @@ export declare const VapiToolCallsMessageSchema: z.ZodObject<{
         } | undefined;
         type?: string | undefined;
         name?: string | undefined;
-        arguments?: Record<string, any> | undefined;
+        arguments?: string | Record<string, any> | undefined;
     }>, "many">;
     call: z.ZodOptional<z.ZodObject<{
         id: z.ZodOptional<z.ZodString>;
@@ -126,7 +126,7 @@ export declare const VapiToolCallsMessageSchema: z.ZodObject<{
         } | undefined;
         type?: string | undefined;
         name?: string | undefined;
-        arguments?: Record<string, any> | undefined;
+        arguments?: string | Record<string, any> | undefined;
     }[];
     call?: {
         assistantId?: string | undefined;
@@ -390,7 +390,7 @@ export declare const VapiWebhookMessageSchema: z.ZodDiscriminatedUnion<"type", [
             arguments?: any;
         }>>;
         name: z.ZodOptional<z.ZodString>;
-        arguments: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        arguments: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodString]>>;
     }, "strip", z.ZodTypeAny, {
         id: string;
         function?: {
@@ -399,7 +399,7 @@ export declare const VapiWebhookMessageSchema: z.ZodDiscriminatedUnion<"type", [
         } | undefined;
         type?: string | undefined;
         name?: string | undefined;
-        arguments?: Record<string, any> | undefined;
+        arguments?: string | Record<string, any> | undefined;
     }, {
         id: string;
         function?: {
@@ -408,7 +408,7 @@ export declare const VapiWebhookMessageSchema: z.ZodDiscriminatedUnion<"type", [
         } | undefined;
         type?: string | undefined;
         name?: string | undefined;
-        arguments?: Record<string, any> | undefined;
+        arguments?: string | Record<string, any> | undefined;
     }>, {
         id: string;
         name: string;
@@ -421,7 +421,7 @@ export declare const VapiWebhookMessageSchema: z.ZodDiscriminatedUnion<"type", [
         } | undefined;
         type?: string | undefined;
         name?: string | undefined;
-        arguments?: Record<string, any> | undefined;
+        arguments?: string | Record<string, any> | undefined;
     }>, "many">;
     call: z.ZodOptional<z.ZodObject<{
         id: z.ZodOptional<z.ZodString>;
@@ -454,7 +454,7 @@ export declare const VapiWebhookMessageSchema: z.ZodDiscriminatedUnion<"type", [
         } | undefined;
         type?: string | undefined;
         name?: string | undefined;
-        arguments?: Record<string, any> | undefined;
+        arguments?: string | Record<string, any> | undefined;
     }[];
     call?: {
         assistantId?: string | undefined;
@@ -713,7 +713,7 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
                 arguments?: any;
             }>>;
             name: z.ZodOptional<z.ZodString>;
-            arguments: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+            arguments: z.ZodOptional<z.ZodUnion<[z.ZodRecord<z.ZodString, z.ZodAny>, z.ZodString]>>;
         }, "strip", z.ZodTypeAny, {
             id: string;
             function?: {
@@ -722,7 +722,7 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
             } | undefined;
             type?: string | undefined;
             name?: string | undefined;
-            arguments?: Record<string, any> | undefined;
+            arguments?: string | Record<string, any> | undefined;
         }, {
             id: string;
             function?: {
@@ -731,7 +731,7 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
             } | undefined;
             type?: string | undefined;
             name?: string | undefined;
-            arguments?: Record<string, any> | undefined;
+            arguments?: string | Record<string, any> | undefined;
         }>, {
             id: string;
             name: string;
@@ -744,7 +744,7 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
             } | undefined;
             type?: string | undefined;
             name?: string | undefined;
-            arguments?: Record<string, any> | undefined;
+            arguments?: string | Record<string, any> | undefined;
         }>, "many">;
         call: z.ZodOptional<z.ZodObject<{
             id: z.ZodOptional<z.ZodString>;
@@ -777,7 +777,7 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
             } | undefined;
             type?: string | undefined;
             name?: string | undefined;
-            arguments?: Record<string, any> | undefined;
+            arguments?: string | Record<string, any> | undefined;
         }[];
         call?: {
             assistantId?: string | undefined;
@@ -1106,7 +1106,7 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
             } | undefined;
             type?: string | undefined;
             name?: string | undefined;
-            arguments?: Record<string, any> | undefined;
+            arguments?: string | Record<string, any> | undefined;
         }[];
         call?: {
             assistantId?: string | undefined;
