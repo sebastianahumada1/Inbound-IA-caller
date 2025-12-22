@@ -129,6 +129,15 @@ export class VapiWebhookHandler {
             case 'tool-calls':
                 // Extract GHL metadata from call metadata if available
                 const ghlMetadata = message.call?.metadata?.ghl || null;
+                Logger.info('[VAPI] Extracted GHL metadata for tool-calls', {
+                    hasGhlMetadata: !!ghlMetadata,
+                    ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
+                    hasContact: !!ghlMetadata?.contact,
+                    contactKeys: ghlMetadata?.contact ? Object.keys(ghlMetadata.contact) : [],
+                    contactPhone: ghlMetadata?.contact?.phone,
+                    contactPhoneNumber: ghlMetadata?.contact?.phoneNumber,
+                    fullGhlMetadata: JSON.stringify(ghlMetadata).substring(0, 500),
+                });
                 return await this.handleToolCalls(message.toolCallList, assistantId, ghlMetadata);
             case 'call.ended':
                 return this.handleCallEnded(message);

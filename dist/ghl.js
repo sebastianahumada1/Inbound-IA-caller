@@ -564,7 +564,22 @@ export class GHLConnector {
     }
     async scheduleAppointment(id, args, ghlMetadata) {
         try {
-            Logger.info('[CALENDAR] Processing schedule_appointment', { id, args, hasGhlMetadata: !!ghlMetadata });
+            Logger.info('[CALENDAR] Processing schedule_appointment', {
+                id,
+                args,
+                hasGhlMetadata: !!ghlMetadata,
+                ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
+                ghlMetadataContact: ghlMetadata?.contact ? {
+                    hasPhone: !!ghlMetadata.contact.phone,
+                    hasPhoneNumber: !!ghlMetadata.contact.phoneNumber,
+                    phone: ghlMetadata.contact.phone,
+                    phoneNumber: ghlMetadata.contact.phoneNumber,
+                    firstName: ghlMetadata.contact.firstName,
+                    lastName: ghlMetadata.contact.lastName,
+                    allKeys: Object.keys(ghlMetadata.contact),
+                } : null,
+                fullGhlMetadata: JSON.stringify(ghlMetadata).substring(0, 500),
+            });
             const ghlApiKey = this.getGHLApiKey();
             if (!ghlApiKey) {
                 const error = 'GHL_API_KEY not configured for this client';
