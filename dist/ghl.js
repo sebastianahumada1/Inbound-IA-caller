@@ -616,6 +616,11 @@ export class GHLConnector {
                         id,
                         calendarId,
                         locationId,
+                        calendarDataKeys: calendarResponse.data ? Object.keys(calendarResponse.data) : [],
+                        hasLocationId: !!calendarResponse.data?.locationId,
+                        hasLocation: !!calendarResponse.data?.location,
+                        locationKeys: calendarResponse.data?.location ? Object.keys(calendarResponse.data.location) : [],
+                        fullCalendarData: JSON.stringify(calendarResponse.data).substring(0, 500),
                     });
                 }
                 else {
@@ -784,6 +789,13 @@ export class GHLConnector {
                 Logger.info('[CALENDAR] Added locationId to payload', {
                     id,
                     locationId,
+                    payloadWithLocationId: payload,
+                });
+            }
+            else {
+                Logger.warn('[CALENDAR] locationId not available, payload will not include it', {
+                    id,
+                    calendarId,
                 });
             }
             Logger.info('[CALENDAR] Creating appointment in GHL', {
