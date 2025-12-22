@@ -488,8 +488,20 @@ export class GHLConnector {
                     error: `${error}. Details: ${errorDetails}`,
                 };
             }
+            // Log the full response from GHL to understand the structure
+            Logger.info('[CALENDAR] Full GHL API response', {
+                id,
+                responseData: response.data,
+                responseDataKeys: response.data ? Object.keys(response.data) : [],
+                responseDataType: typeof response.data,
+                responseDataString: JSON.stringify(response.data),
+            });
             // Check if the requested slot is available
-            const freeSlots = response.data?.slots || [];
+            // GHL might return slots in different structures: slots, data.slots, or items
+            const freeSlots = response.data?.slots ||
+                response.data?.data?.slots ||
+                response.data?.items ||
+                (Array.isArray(response.data) ? response.data : []);
             Logger.info('[CALENDAR] Free slots from GHL', {
                 id,
                 freeSlotsCount: freeSlots.length,
@@ -498,6 +510,12 @@ export class GHLConnector {
                 requestedDateTimestamp: requestedDate.getTime(),
                 endDate: endDate.toISOString(),
                 endDateTimestamp: endDate.getTime(),
+                responseStructure: {
+                    hasSlots: !!response.data?.slots,
+                    hasDataSlots: !!response.data?.data?.slots,
+                    hasItems: !!response.data?.items,
+                    isArray: Array.isArray(response.data),
+                },
             });
             const isAvailable = freeSlots.some((slot) => {
                 // Handle different formats: timestamp (number) or ISO string
