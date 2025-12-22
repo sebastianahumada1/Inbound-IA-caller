@@ -514,12 +514,25 @@ export class GHLConnector {
       });
 
       if (!response.ok) {
+        const errorDetails = response.data ? JSON.stringify(response.data) : 'No error details';
         const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
-        Logger.error('[CALENDAR] ' + error, { id, responseData: response.data });
+        Logger.error('[CALENDAR] ' + error, { 
+          id, 
+          calendarId,
+          apiUrl: `${apiUrl}?${params.toString()}`,
+          requestParams: {
+            startDate: startDate.toISOString(),
+            endDate: endDateRange.toISOString(),
+          },
+          responseData: response.data,
+          responseStatus: response.status,
+          responseStatusText: response.statusText,
+          fullResponse: JSON.stringify(response.data),
+        });
         return {
           id,
           ok: false,
-          error,
+          error: `${error}. Details: ${errorDetails}`,
         };
       }
 
