@@ -832,7 +832,63 @@ export class GHLConnector {
             }
             // Ensure firstName and lastName are not empty (GHL requires both)
             const finalFirstName = contactFirstName.trim() || 'Guest';
-            const finalLastName = contactLastName.trim() || 'User';
+            const finalLastName = contactLastName.trim() || finalFirstName; // Use firstName if lastName is empty
+            // GHL might require email or contactId instead of just phone
+            // Try to create/update contact first if we have contactId
+            let contactIdToUse = args.contactId;
+            // If we have contactId, try to use it; otherwise create contact first
+            if (!contactIdToUse) {
+                // Try to find or create contact using phone
+                try {
+                    Logger.info('[CALENDAR] Attempting to find/create contact before scheduling', {
+                        id,
+                        phone: normalizedPhone,
+                    });
+                    // Search for contact by phone
+                    const searchResponse = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(normalizedPhone)}`, {
+                        headers: {
+                            'Authorization': `Bearer ${ghlApiKey}`,
+                            'Content-Type': 'application/json',
+                            'Version': '2021-07-28',
+                        },
+                    });
+                    if (searchResponse.ok && searchResponse.data?.contacts?.length > 0) {
+                        contactIdToUse = searchResponse.data.contacts[0].id;
+                        Logger.info('[CALENDAR] Found existing contact', {
+                            id,
+                            contactId: contactIdToUse,
+                        });
+                    }
+                    else {
+                        // Create new contact
+                        const createContactResponse = await this.httpClient.post('https://services.leadconnectorhq.com/contacts', {
+                            firstName: finalFirstName,
+                            lastName: finalLastName,
+                            phone: normalizedPhone,
+                            locationId: locationId,
+                        }, {
+                            headers: {
+                                'Authorization': `Bearer ${ghlApiKey}`,
+                                'Content-Type': 'application/json',
+                                'Version': '2021-07-28',
+                            },
+                        });
+                        if (createContactResponse.ok) {
+                            contactIdToUse = createContactResponse.data?.contact?.id || createContactResponse.data?.id;
+                            Logger.info('[CALENDAR] Created new contact', {
+                                id,
+                                contactId: contactIdToUse,
+                            });
+                        }
+                    }
+                }
+                catch (error) {
+                    Logger.warn('[CALENDAR] Could not find/create contact, will try without contactId', {
+                        id,
+                        error: error instanceof Error ? error.message : 'Unknown error',
+                    });
+                }
+            }
             const payload = {
                 calendarId,
                 firstName: finalFirstName,
@@ -842,6 +898,14 @@ export class GHLConnector {
                 selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
                 notes: args.notes || '',
             };
+            // Add contactId if available (GHL might prefer this over firstName/lastName/phone)
+            if (contactIdToUse) {
+                payload.contactId = contactIdToUse;
+                Logger.info('[CALENDAR] Added contactId to payload', {
+                    id,
+                    contactId: contactIdToUse,
+                });
+            }
             // Add locationId if available (some GHL endpoints require it)
             if (locationId) {
                 payload.locationId = locationId;
