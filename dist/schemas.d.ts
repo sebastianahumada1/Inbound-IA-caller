@@ -1334,22 +1334,22 @@ export declare const CheckCalendarAvailabilityArgsSchema: z.ZodObject<{
     durationMinutes?: number | undefined;
 }>;
 export declare const ScheduleAppointmentArgsSchema: z.ZodObject<{
-    contactId: z.ZodString;
+    contactId: z.ZodOptional<z.ZodString>;
     name: z.ZodString;
     startTime: z.ZodString;
     endTime: z.ZodString;
     notes: z.ZodDefault<z.ZodOptional<z.ZodString>>;
 }, "strip", z.ZodTypeAny, {
     name: string;
-    contactId: string;
     startTime: string;
     endTime: string;
     notes: string;
+    contactId?: string | undefined;
 }, {
     name: string;
-    contactId: string;
     startTime: string;
     endTime: string;
+    contactId?: string | undefined;
     notes?: string | undefined;
 }>;
 export declare const ToolResultSchema: z.ZodObject<{

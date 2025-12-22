@@ -613,12 +613,15 @@ export class GHLConnector {
             if (ghlMetadata?.contact) {
                 Logger.info('[CALENDAR] Using contact details from GHL metadata', {
                     id,
-                    contactId: args.contactId,
                     hasContact: !!ghlMetadata.contact,
                 });
                 contactPhone = ghlMetadata.contact.phone || ghlMetadata.contact.phoneNumber || '';
                 contactFirstName = ghlMetadata.contact.firstName || '';
                 contactLastName = ghlMetadata.contact.lastName || '';
+                // Normalize phone (remove spaces and special characters, keep + and numbers)
+                if (contactPhone) {
+                    contactPhone = contactPhone.replace(/\s+/g, '').trim();
+                }
                 Logger.info('[CALENDAR] Contact details from metadata', {
                     id,
                     firstName: contactFirstName,
@@ -626,13 +629,19 @@ export class GHLConnector {
                     phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
                 });
             }
-            // If metadata doesn't have all required fields, try to fetch from API
-            if (!contactPhone || !contactFirstName) {
-                Logger.info('[CALENDAR] Attempting to fetch missing contact details from API', {
+            // Parse name from args.name
+            const nameParts = args.name.trim().split(/\s+/);
+            if (!contactFirstName) {
+                contactFirstName = nameParts[0] || args.name;
+            }
+            if (!contactLastName) {
+                contactLastName = nameParts.slice(1).join(' ') || '';
+            }
+            // Only try API if we're missing phone AND have contactId
+            if (!contactPhone && args.contactId) {
+                Logger.info('[CALENDAR] Attempting to fetch phone from API', {
                     id,
                     contactId: args.contactId,
-                    hasPhone: !!contactPhone,
-                    hasFirstName: !!contactFirstName,
                 });
                 try {
                     const contactResponse = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/${args.contactId}`, {
@@ -644,25 +653,19 @@ export class GHLConnector {
                     });
                     if (contactResponse.ok) {
                         const contact = contactResponse.data?.contact || contactResponse.data;
-                        if (!contactPhone) {
-                            contactPhone = contact.phone || contact.phoneNumber || '';
+                        contactPhone = contact.phone || contact.phoneNumber || '';
+                        // Normalize phone
+                        if (contactPhone) {
+                            contactPhone = contactPhone.replace(/\s+/g, '').trim();
                         }
-                        if (!contactFirstName) {
-                            contactFirstName = contact.firstName || '';
-                        }
-                        if (!contactLastName) {
-                            contactLastName = contact.lastName || '';
-                        }
-                        Logger.info('[CALENDAR] Contact details retrieved from API', {
+                        Logger.info('[CALENDAR] Phone retrieved from API', {
                             id,
                             contactId: args.contactId,
-                            firstName: contactFirstName,
-                            lastName: contactLastName,
                             phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
                         });
                     }
                     else {
-                        Logger.warn('[CALENDAR] Could not fetch contact details from API', {
+                        Logger.warn('[CALENDAR] Could not fetch phone from API', {
                             id,
                             contactId: args.contactId,
                             status: contactResponse.status,
@@ -671,33 +674,22 @@ export class GHLConnector {
                     }
                 }
                 catch (error) {
-                    Logger.warn('[CALENDAR] Error fetching contact from API', {
+                    Logger.warn('[CALENDAR] Error fetching phone from API', {
                         id,
                         contactId: args.contactId,
                         error: error instanceof Error ? error.message : 'Unknown error',
                     });
                 }
             }
-            // Parse name from args.name if contact details still not available
-            const nameParts = args.name.trim().split(/\s+/);
-            if (!contactFirstName && !contactLastName) {
-                contactFirstName = nameParts[0] || args.name;
-                contactLastName = nameParts.slice(1).join(' ') || '';
-            }
-            else if (!contactFirstName) {
-                contactFirstName = nameParts[0] || args.name;
-            }
-            else if (!contactLastName) {
-                contactLastName = nameParts.slice(1).join(' ') || '';
-            }
-            // Phone is required by GHL API, so we need to handle this
+            // Phone is required by GHL API
             if (!contactPhone) {
-                const error = 'Phone number is required but could not be retrieved from contact metadata or API. Please ensure the contact has a phone number in GHL.';
+                const error = 'Phone number is required but could not be retrieved from contact metadata or API. Please ensure the contact has a phone number in GHL or that the phone is included in the webhook metadata.';
                 Logger.error('[CALENDAR] ' + error, {
                     id,
                     contactId: args.contactId,
                     hasGhlMetadata: !!ghlMetadata,
                     hasGhlContact: !!ghlMetadata?.contact,
+                    ghlContactKeys: ghlMetadata?.contact ? Object.keys(ghlMetadata.contact) : [],
                 });
                 return {
                     id,
@@ -729,10 +721,13 @@ export class GHLConnector {
             Logger.info('[CALENDAR] Creating appointment in GHL', {
                 id,
                 calendarId,
-                contactId: args.contactId,
+                contactId: args.contactId || 'not provided',
                 selectedSlot,
                 startTime: startTime.toISOString(),
                 endTime: endTime.toISOString(),
+                firstName: contactFirstName,
+                lastName: contactLastName,
+                phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
                 payload,
             });
             const response = await this.httpClient.post(apiUrl, payload, {
@@ -746,7 +741,7 @@ export class GHLConnector {
                 Logger.info('[CALENDAR] Appointment created successfully', {
                     id,
                     appointmentId: response.data?.id,
-                    contactId: args.contactId,
+                    contactId: args.contactId || 'not provided',
                     responseData: response.data,
                 });
                 return {
@@ -755,7 +750,7 @@ export class GHLConnector {
                     data: {
                         appointmentId: response.data?.id,
                         calendarId,
-                        contactId: args.contactId,
+                        contactId: args.contactId || undefined,
                         startTime: startTime.toISOString(),
                         endTime: endTime.toISOString(),
                         message: 'Appointment scheduled successfully',
@@ -768,7 +763,7 @@ export class GHLConnector {
                 Logger.error('[CALENDAR] ' + error, {
                     id,
                     calendarId,
-                    contactId: args.contactId,
+                    contactId: args.contactId || 'not provided',
                     apiUrl,
                     payload,
                     responseData: response.data,
