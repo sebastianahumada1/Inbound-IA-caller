@@ -86,20 +86,18 @@ export class VapiWebhookHandler {
           body: req.body 
         });
         
-        // Si es un tool-calls, devolver 200 con error en el resultado
+        // Si es un tool-calls, devolver 200 con error en el resultado (formato Vapi)
         const messageType = req.body?.message?.type;
         if (messageType === 'tool-calls') {
           const toolCalls = req.body?.message?.toolCallList || [];
+          const errorMessage = `Invalid request: ${validationResult.error.issues.map((i: any) => i.message).join(', ')}`;
           const errorResults = toolCalls.map((tc: any) => ({
-            id: tc.id || tc.function?.name || 'unknown',
-            ok: false,
-            error: `Invalid request: ${validationResult.error.issues.map((i: any) => i.message).join(', ')}`,
+            toolCallId: tc.id || tc.function?.name || 'unknown',
+            result: errorMessage,
           }));
           
           res.status(200).json({
-            ok: false,
             results: errorResults,
-            message: 'Invalid request body',
           });
           return;
         }
@@ -129,20 +127,17 @@ export class VapiWebhookHandler {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       Logger.error('Error processing webhook', { error: errorMessage });
       
-      // Si es tool-calls, devolver 200 con error
+      // Si es tool-calls, devolver 200 con error (formato Vapi)
       const messageType = req.body?.message?.type;
       if (messageType === 'tool-calls') {
         const toolCalls = req.body?.message?.toolCallList || [];
         const errorResults = toolCalls.map((tc: any) => ({
-          id: tc.id || tc.function?.name || 'unknown',
-          ok: false,
-          error: errorMessage,
+          toolCallId: tc.id || tc.function?.name || 'unknown',
+          result: errorMessage,
         }));
         
         res.status(200).json({
-          ok: false,
           results: errorResults,
-          message: 'Internal server error',
         });
         return;
       }
@@ -197,7 +192,7 @@ export class VapiWebhookHandler {
     }
   }
 
-  private async handleToolCalls(toolCallList: VapiToolCall[], assistantId?: string): Promise<WebhookResponse> {
+  private async handleToolCalls(toolCallList: VapiToolCall[], assistantId?: string): Promise<any> {
     Logger.info('Processing tool calls', { 
       count: toolCallList.length,
       assistantId,
@@ -208,22 +203,35 @@ export class VapiWebhookHandler {
       this.ghlConnector.setAssistantId(assistantId);
     }
     
-    const results: ToolResult[] = [];
+    const vapiResults: Array<{ toolCallId: string; result: string }> = [];
 
     // Process tool calls sequentially to avoid overwhelming GHL
     for (const toolCall of toolCallList) {
       const result = await this.dispatchToolCall(toolCall);
-      results.push(result);
+      
+      // Convert to Vapi format: toolCallId and result (as string)
+      let resultString: string;
+      if (result.ok) {
+        // Convert data to JSON string if it exists, otherwise use success message
+        if (result.data) {
+          resultString = JSON.stringify(result.data);
+        } else {
+          resultString = 'Success';
+        }
+      } else {
+        // For errors, return error message as string
+        resultString = result.error || 'Unknown error';
+      }
+      
+      vapiResults.push({
+        toolCallId: result.id,
+        result: resultString,
+      });
     }
 
-    const allSuccessful = results.every(result => result.ok);
-    
+    // Vapi expects just the results array, not wrapped in ok/message
     return {
-      ok: allSuccessful,
-      results,
-      message: allSuccessful 
-        ? 'All tool calls processed successfully' 
-        : 'Some tool calls failed',
+      results: vapiResults,
     };
   }
 
