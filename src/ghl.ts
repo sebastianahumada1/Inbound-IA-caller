@@ -690,15 +690,22 @@ export class GHLConnector {
           );
 
           if (calendarResponse.ok) {
-            locationId = calendarResponse.data?.locationId || calendarResponse.data?.location?.id;
+            // GHL API returns calendar data in different structures:
+            // Option 1: { calendar: { locationId: "..." } } - most common
+            // Option 2: { locationId: "..." }
+            // Option 3: { location: { id: "..." } }
+            const calendarData = calendarResponse.data?.calendar || calendarResponse.data;
+            locationId = calendarData?.locationId || calendarResponse.data?.locationId || calendarData?.location?.id || calendarResponse.data?.location?.id;
+            
             Logger.info('[CALENDAR] Retrieved locationId from calendar', {
               id,
               calendarId,
               locationId,
               calendarDataKeys: calendarResponse.data ? Object.keys(calendarResponse.data) : [],
-              hasLocationId: !!calendarResponse.data?.locationId,
-              hasLocation: !!calendarResponse.data?.location,
-              locationKeys: calendarResponse.data?.location ? Object.keys(calendarResponse.data.location) : [],
+              calendarKeys: calendarData ? Object.keys(calendarData) : [],
+              hasLocationId: !!calendarData?.locationId,
+              hasLocation: !!calendarData?.location,
+              locationKeys: calendarData?.location ? Object.keys(calendarData.location) : [],
               fullCalendarData: JSON.stringify(calendarResponse.data).substring(0, 500),
             });
           } else {
