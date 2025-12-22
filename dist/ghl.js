@@ -494,75 +494,41 @@ export class GHLConnector {
                 responseData: response.data,
                 responseDataKeys: response.data ? Object.keys(response.data) : [],
                 responseDataType: typeof response.data,
-                responseDataString: JSON.stringify(response.data),
             });
-            // Check if the requested slot is available
-            // GHL might return slots in different structures: slots, data.slots, or items
-            const freeSlots = response.data?.slots ||
-                response.data?.data?.slots ||
-                response.data?.items ||
-                (Array.isArray(response.data) ? response.data : []);
+            // GHL returns slots organized by date: { "2025-12-23": { "slots": [...] } }
+            // Extract the date key for the requested date (format: YYYY-MM-DD)
+            const requestedDateKey = requestedDate.toISOString().split('T')[0];
+            // Get slots for the requested date
+            const dateSlots = requestedDateKey && response.data ? response.data[requestedDateKey] : null;
+            const freeSlots = dateSlots?.slots || [];
             Logger.info('[CALENDAR] Free slots from GHL', {
                 id,
+                requestedDateKey,
                 freeSlotsCount: freeSlots.length,
                 freeSlots: freeSlots,
                 requestedDate: requestedDate.toISOString(),
                 requestedDateTimestamp: requestedDate.getTime(),
                 endDate: endDate.toISOString(),
                 endDateTimestamp: endDate.getTime(),
-                responseStructure: {
-                    hasSlots: !!response.data?.slots,
-                    hasDataSlots: !!response.data?.data?.slots,
-                    hasItems: !!response.data?.items,
-                    isArray: Array.isArray(response.data),
-                },
             });
-            const isAvailable = freeSlots.some((slot) => {
-                // Handle different formats: timestamp (number) or ISO string
-                let slotStart;
-                let slotEnd;
-                if (typeof slot.startTime === 'number') {
-                    slotStart = new Date(slot.startTime);
-                }
-                else if (typeof slot.startTime === 'string') {
-                    slotStart = new Date(slot.startTime);
-                }
-                else {
-                    Logger.warn('[CALENDAR] Invalid slot startTime format', { slot });
-                    return false;
-                }
-                if (typeof slot.endTime === 'number') {
-                    slotEnd = new Date(slot.endTime);
-                }
-                else if (typeof slot.endTime === 'string') {
-                    slotEnd = new Date(slot.endTime);
-                }
-                else {
-                    Logger.warn('[CALENDAR] Invalid slot endTime format', { slot });
-                    return false;
-                }
-                // Check if requested slot fits completely within the free slot
-                // requestedDate should be >= slotStart AND endDate should be <= slotEnd
-                const fitsCompletely = requestedDate.getTime() >= slotStart.getTime() &&
-                    endDate.getTime() <= slotEnd.getTime();
-                // Also check if there's any overlap (more lenient check)
-                const hasOverlap = requestedDate.getTime() < slotEnd.getTime() &&
-                    endDate.getTime() > slotStart.getTime();
+            // GHL returns slots as ISO string times (e.g., "2025-12-23T10:00:00-05:00")
+            // Check if the requested time matches any of the available slot start times
+            // Since slots are 30-minute intervals, we check if requestedDate matches a slot start time
+            const isAvailable = freeSlots.some((slotTime) => {
+                const slotDate = new Date(slotTime);
+                // Check if the requested time matches the slot start time (within 1 minute tolerance)
+                const timeDiff = Math.abs(requestedDate.getTime() - slotDate.getTime());
+                const matches = timeDiff < 60000; // 1 minute tolerance
                 Logger.debug('[CALENDAR] Comparing slot', {
-                    slotStart: slotStart.toISOString(),
-                    slotStartTimestamp: slotStart.getTime(),
-                    slotEnd: slotEnd.toISOString(),
-                    slotEndTimestamp: slotEnd.getTime(),
+                    slotTime,
+                    slotDate: slotDate.toISOString(),
+                    slotDateTimestamp: slotDate.getTime(),
                     requestedDate: requestedDate.toISOString(),
                     requestedDateTimestamp: requestedDate.getTime(),
-                    endDate: endDate.toISOString(),
-                    endDateTimestamp: endDate.getTime(),
-                    fitsCompletely,
-                    hasOverlap,
-                    slotData: slot,
+                    timeDiffMs: timeDiff,
+                    matches,
                 });
-                // Use fitsCompletely for strict matching (requested slot must be fully within free slot)
-                return fitsCompletely;
+                return matches;
             });
             Logger.info('[CALENDAR] Availability check completed', {
                 id,
