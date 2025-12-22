@@ -621,11 +621,23 @@ export class GHLConnector {
                     error,
                 };
             }
-            // Try to get contact details from GHL metadata first (from webhook)
+            // Try to get contact details from multiple sources (priority order):
+            // 1. args.phone (passed directly by AI agent)
+            // 2. GHL metadata (from webhook)
+            // 3. API call (if contactId provided)
             let contactPhone = '';
             let contactFirstName = '';
             let contactLastName = '';
-            if (ghlMetadata?.contact) {
+            // First priority: phone from args (passed directly by AI agent)
+            if (args.phone) {
+                contactPhone = args.phone;
+                Logger.info('[CALENDAR] Using phone from args', {
+                    id,
+                    phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
+                });
+            }
+            // Second priority: GHL metadata (from webhook)
+            if (!contactPhone && ghlMetadata?.contact) {
                 Logger.info('[CALENDAR] Using contact details from GHL metadata', {
                     id,
                     hasContact: !!ghlMetadata.contact,
@@ -633,10 +645,6 @@ export class GHLConnector {
                 contactPhone = ghlMetadata.contact.phone || ghlMetadata.contact.phoneNumber || '';
                 contactFirstName = ghlMetadata.contact.firstName || '';
                 contactLastName = ghlMetadata.contact.lastName || '';
-                // Normalize phone (remove spaces and special characters, keep + and numbers)
-                if (contactPhone) {
-                    contactPhone = contactPhone.replace(/\s+/g, '').trim();
-                }
                 Logger.info('[CALENDAR] Contact details from metadata', {
                     id,
                     firstName: contactFirstName,
@@ -652,7 +660,11 @@ export class GHLConnector {
             if (!contactLastName) {
                 contactLastName = nameParts.slice(1).join(' ') || '';
             }
-            // Only try API if we're missing phone AND have contactId
+            // Normalize phone (remove spaces and special characters, keep + and numbers)
+            if (contactPhone) {
+                contactPhone = contactPhone.replace(/\s+/g, '').trim();
+            }
+            // Third priority: Only try API if we're missing phone AND have contactId
             if (!contactPhone && args.contactId) {
                 Logger.info('[CALENDAR] Attempting to fetch phone from API', {
                     id,

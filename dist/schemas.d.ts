@@ -1336,6 +1336,7 @@ export declare const CheckCalendarAvailabilityArgsSchema: z.ZodObject<{
 export declare const ScheduleAppointmentArgsSchema: z.ZodObject<{
     contactId: z.ZodOptional<z.ZodString>;
     name: z.ZodString;
+    phone: z.ZodOptional<z.ZodString>;
     startTime: z.ZodString;
     endTime: z.ZodString;
     notes: z.ZodDefault<z.ZodOptional<z.ZodString>>;
@@ -1344,11 +1345,13 @@ export declare const ScheduleAppointmentArgsSchema: z.ZodObject<{
     startTime: string;
     endTime: string;
     notes: string;
+    phone?: string | undefined;
     contactId?: string | undefined;
 }, {
     name: string;
     startTime: string;
     endTime: string;
+    phone?: string | undefined;
     contactId?: string | undefined;
     notes?: string | undefined;
 }>;

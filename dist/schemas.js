@@ -188,6 +188,7 @@ export const CheckCalendarAvailabilityArgsSchema = z.object({
 export const ScheduleAppointmentArgsSchema = z.object({
     contactId: z.string().optional(),
     name: z.string().min(1),
+    phone: z.string().optional(),
     startTime: z.string().min(1),
     endTime: z.string().min(1),
     notes: z.string().optional().default(''),
