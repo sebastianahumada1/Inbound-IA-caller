@@ -717,6 +717,10 @@ export class GHLConnector {
             }
             if (!contactLastName) {
                 contactLastName = nameParts.slice(1).join(' ') || '';
+                // GHL might require lastName, use firstName if empty
+                if (!contactLastName && contactFirstName) {
+                    contactLastName = contactFirstName;
+                }
             }
             // Normalize phone (remove spaces and special characters, keep + and numbers)
             if (contactPhone) {
@@ -794,21 +798,45 @@ export class GHLConnector {
                 const date = new Date(args.startTime);
                 selectedSlot = date.toISOString().replace('Z', '-05:00');
             }
-            // Normalize phone number - GHL might require specific format
-            // Remove + and keep only digits, or keep E.164 format
+            // Normalize phone number - GHL requires E.164 format (with + and country code)
             let normalizedPhone = contactPhone;
-            if (normalizedPhone.startsWith('+')) {
-                // Keep E.164 format (with +)
-                normalizedPhone = normalizedPhone.replace(/\s+/g, '').trim();
+            // Remove all spaces and special characters except +
+            normalizedPhone = normalizedPhone.replace(/[\s\-\(\)\.]/g, '').trim();
+            // If phone doesn't start with +, try to add country code
+            if (!normalizedPhone.startsWith('+')) {
+                // If it's a US number (10 digits), add +1
+                if (/^\d{10}$/.test(normalizedPhone)) {
+                    normalizedPhone = '+1' + normalizedPhone;
+                }
+                // If it's a Colombian number (10 digits starting with 3), add +57
+                else if (/^3\d{9}$/.test(normalizedPhone)) {
+                    normalizedPhone = '+57' + normalizedPhone;
+                }
+                // Otherwise, assume it needs + prefix (might be missing country code)
+                else if (/^\d+$/.test(normalizedPhone)) {
+                    // Keep as is but log warning - might need country code
+                    Logger.warn('[CALENDAR] Phone number missing country code, using as-is', {
+                        id,
+                        phone: normalizedPhone,
+                    });
+                }
             }
-            else {
-                // If no +, ensure it's just digits
-                normalizedPhone = normalizedPhone.replace(/\D/g, '');
+            // Ensure phone is in E.164 format (starts with +)
+            if (!normalizedPhone.startsWith('+')) {
+                Logger.warn('[CALENDAR] Phone number not in E.164 format, adding +', {
+                    id,
+                    originalPhone: contactPhone,
+                    normalizedPhone,
+                });
+                normalizedPhone = '+' + normalizedPhone;
             }
+            // Ensure firstName and lastName are not empty (GHL requires both)
+            const finalFirstName = contactFirstName.trim() || 'Guest';
+            const finalLastName = contactLastName.trim() || 'User';
             const payload = {
                 calendarId,
-                firstName: contactFirstName.trim(),
-                lastName: contactLastName.trim(),
+                firstName: finalFirstName,
+                lastName: finalLastName,
                 phone: normalizedPhone,
                 selectedSlot,
                 selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
