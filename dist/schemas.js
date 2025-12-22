@@ -1,9 +1,41 @@
 import { z } from 'zod';
 // Base webhook message schemas
+// Schema para tool calls de Vapi (soporta formato con function anidado)
 export const VapiToolCallSchema = z.object({
     id: z.string(),
-    name: z.string(),
-    arguments: z.record(z.any()),
+    type: z.string().optional(), // "function"
+    function: z.object({
+        name: z.string(),
+        arguments: z.any(), // Puede ser objeto o string JSON
+    }).optional(),
+    // Soporte para formato legacy (por si acaso)
+    name: z.string().optional(),
+    arguments: z.record(z.any()).optional(),
+}).transform((data) => {
+    // Si viene en el nuevo formato con function anidado
+    if (data.function) {
+        let parsedArgs = data.function.arguments;
+        // Si arguments es un string JSON, parsearlo
+        if (typeof parsedArgs === 'string') {
+            try {
+                parsedArgs = JSON.parse(parsedArgs);
+            }
+            catch {
+                parsedArgs = {};
+            }
+        }
+        return {
+            id: data.id,
+            name: data.function.name,
+            arguments: parsedArgs || {},
+        };
+    }
+    // Formato legacy
+    return {
+        id: data.id,
+        name: data.name || '',
+        arguments: data.arguments || {},
+    };
 });
 export const VapiToolCallsMessageSchema = z.object({
     type: z.literal('tool-calls'),
