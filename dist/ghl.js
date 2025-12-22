@@ -490,9 +490,29 @@ export class GHLConnector {
             }
             // Check if the requested slot is available
             const freeSlots = response.data?.slots || [];
+            Logger.info('[CALENDAR] Free slots from GHL', {
+                id,
+                freeSlotsCount: freeSlots.length,
+                freeSlots: freeSlots,
+                requestedDate: requestedDate.toISOString(),
+                requestedDateTimestamp: requestedDate.getTime(),
+                endDate: endDate.toISOString(),
+                endDateTimestamp: endDate.getTime(),
+            });
             const isAvailable = freeSlots.some((slot) => {
                 const slotStart = new Date(slot.startTime);
                 const slotEnd = new Date(slot.endTime);
+                Logger.debug('[CALENDAR] Comparing slot', {
+                    slotStart: slotStart.toISOString(),
+                    slotStartTimestamp: slotStart.getTime(),
+                    slotEnd: slotEnd.toISOString(),
+                    slotEndTimestamp: slotEnd.getTime(),
+                    requestedDate: requestedDate.toISOString(),
+                    requestedDateTimestamp: requestedDate.getTime(),
+                    endDate: endDate.toISOString(),
+                    endDateTimestamp: endDate.getTime(),
+                    fitsInSlot: requestedDate >= slotStart && endDate <= slotEnd,
+                });
                 return requestedDate >= slotStart && endDate <= slotEnd;
             });
             Logger.info('[CALENDAR] Availability check completed', {
