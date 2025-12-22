@@ -660,45 +660,61 @@ export class GHLConnector {
         };
       }
 
-      // Try to get locationId from calendar info (some GHL endpoints require it)
+      // Try to get locationId (priority: config > calendar API)
       let locationId: string | undefined;
-      try {
-        const calendarResponse = await this.httpClient.get(
-          `https://services.leadconnectorhq.com/calendars/${calendarId}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${ghlApiKey}`,
-              'Content-Type': 'application/json',
-              'Version': '2021-07-28',
-            },
-          }
-        );
-
-        if (calendarResponse.ok) {
-          locationId = calendarResponse.data?.locationId || calendarResponse.data?.location?.id;
-          Logger.info('[CALENDAR] Retrieved locationId from calendar', {
+      
+      // First, try to get from config
+      if (this.assistantId) {
+        locationId = ClientConfigManager.getLocationId(this.assistantId);
+        if (locationId) {
+          Logger.info('[CALENDAR] Using locationId from config', {
             id,
             calendarId,
             locationId,
-            calendarDataKeys: calendarResponse.data ? Object.keys(calendarResponse.data) : [],
-            hasLocationId: !!calendarResponse.data?.locationId,
-            hasLocation: !!calendarResponse.data?.location,
-            locationKeys: calendarResponse.data?.location ? Object.keys(calendarResponse.data.location) : [],
-            fullCalendarData: JSON.stringify(calendarResponse.data).substring(0, 500),
-          });
-        } else {
-          Logger.warn('[CALENDAR] Could not retrieve calendar info for locationId', {
-            id,
-            calendarId,
-            status: calendarResponse.status,
           });
         }
-      } catch (error) {
-        Logger.warn('[CALENDAR] Error retrieving calendar info for locationId', {
-          id,
-          calendarId,
-          error: error instanceof Error ? error.message : 'Unknown error',
-        });
+      }
+
+      // If not in config, try to get from calendar info
+      if (!locationId) {
+        try {
+          const calendarResponse = await this.httpClient.get(
+            `https://services.leadconnectorhq.com/calendars/${calendarId}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${ghlApiKey}`,
+                'Content-Type': 'application/json',
+                'Version': '2021-07-28',
+              },
+            }
+          );
+
+          if (calendarResponse.ok) {
+            locationId = calendarResponse.data?.locationId || calendarResponse.data?.location?.id;
+            Logger.info('[CALENDAR] Retrieved locationId from calendar', {
+              id,
+              calendarId,
+              locationId,
+              calendarDataKeys: calendarResponse.data ? Object.keys(calendarResponse.data) : [],
+              hasLocationId: !!calendarResponse.data?.locationId,
+              hasLocation: !!calendarResponse.data?.location,
+              locationKeys: calendarResponse.data?.location ? Object.keys(calendarResponse.data.location) : [],
+              fullCalendarData: JSON.stringify(calendarResponse.data).substring(0, 500),
+            });
+          } else {
+            Logger.warn('[CALENDAR] Could not retrieve calendar info for locationId', {
+              id,
+              calendarId,
+              status: calendarResponse.status,
+            });
+          }
+        } catch (error) {
+          Logger.warn('[CALENDAR] Error retrieving calendar info for locationId', {
+            id,
+            calendarId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
       }
 
       // Validate date formats

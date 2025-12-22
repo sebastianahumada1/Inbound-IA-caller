@@ -6,6 +6,7 @@ export interface ClientConfig {
     assistantId: string;
     ghlApiKey: string;
     calendarId?: string;
+    locationId?: string;
     slackChannelId?: string;
 }
 /**
@@ -34,6 +35,10 @@ export declare class ClientConfigManager {
      * Get Calendar ID by Assistant ID
      */
     static getCalendarId(assistantId: string): string | undefined;
+    /**
+     * Get Location ID by Assistant ID
+     */
+    static getLocationId(assistantId: string): string | undefined;
     /**
      * Get Slack Channel ID by Assistant ID
      */

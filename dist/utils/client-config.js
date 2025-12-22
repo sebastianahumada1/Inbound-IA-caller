@@ -19,6 +19,7 @@ export class ClientConfigManager {
                 assistantIdVar: 'PREMIER_WELLNESS_ASSISTANT_ID',
                 apiKeyVar: 'PREMIER_WELLNESS_GHL_API_KEY',
                 calendarIdVar: 'PREMIER_WELLNESS_CALENDAR_ID',
+                locationIdVar: 'PREMIER_WELLNESS_LOCATION_ID',
                 slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS',
             },
             {
@@ -26,6 +27,7 @@ export class ClientConfigManager {
                 assistantIdVar: 'WEST_TEXAS_ASSISTANT_ID',
                 apiKeyVar: 'WEST_TEXAS_GHL_API_KEY',
                 calendarIdVar: 'WEST_TEXAS_CALENDAR_ID',
+                locationIdVar: 'WEST_TEXAS_LOCATION_ID',
                 slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS',
             },
             {
@@ -33,6 +35,7 @@ export class ClientConfigManager {
                 assistantIdVar: 'THIRD_CLIENT_ASSISTANT_ID',
                 apiKeyVar: 'THIRD_CLIENT_GHL_API_KEY',
                 calendarIdVar: 'THIRD_CLIENT_CALENDAR_ID',
+                locationIdVar: 'THIRD_CLIENT_LOCATION_ID',
                 slackChannelVar: 'SLACK_CHANNEL_ID_THIRD_CLIENT',
             },
             {
@@ -40,6 +43,7 @@ export class ClientConfigManager {
                 assistantIdVar: 'DATA_DRIVEN_PRACTICES_ASSISTANT_ID',
                 apiKeyVar: 'DATA_DRIVEN_PRACTICES_GHL_API_KEY',
                 calendarIdVar: 'DATA_DRIVEN_PRACTICES_CALENDAR_ID',
+                locationIdVar: 'DATA_DRIVEN_PRACTICES_LOCATION_ID',
                 slackChannelVar: 'SLACK_CHANNEL_ID_DATA_DRIVEN_PRACTICES',
             },
             {
@@ -47,6 +51,7 @@ export class ClientConfigManager {
                 assistantIdVar: 'NUVIVE_ASSISTANT_ID',
                 apiKeyVar: 'NUVIVE_GHL_API_KEY',
                 calendarIdVar: 'NUVIVE_CALENDAR_ID',
+                locationIdVar: 'NUVIVE_LOCATION_ID',
                 slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE',
             },
         ];
@@ -76,6 +81,13 @@ export class ClientConfigManager {
             const calendarId = process.env[clientDef.calendarIdVar];
             if (calendarId) {
                 config.calendarId = calendarId;
+            }
+            // Add optional location ID if configured
+            if (clientDef.locationIdVar) {
+                const locationId = process.env[clientDef.locationIdVar];
+                if (locationId) {
+                    config.locationId = locationId;
+                }
             }
             // Add optional Slack channel if configured
             const slackChannel = process.env[clientDef.slackChannelVar];
@@ -144,6 +156,13 @@ export class ClientConfigManager {
     static getCalendarId(assistantId) {
         const config = this.getConfigByAssistantId(assistantId);
         return config?.calendarId;
+    }
+    /**
+     * Get Location ID by Assistant ID
+     */
+    static getLocationId(assistantId) {
+        const config = this.getConfigByAssistantId(assistantId);
+        return config?.locationId;
     }
     /**
      * Get Slack Channel ID by Assistant ID
