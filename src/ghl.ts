@@ -879,11 +879,22 @@ export class GHLConnector {
         selectedSlot = date.toISOString().replace('Z', '-05:00');
       }
 
+      // Normalize phone number - GHL might require specific format
+      // Remove + and keep only digits, or keep E.164 format
+      let normalizedPhone = contactPhone;
+      if (normalizedPhone.startsWith('+')) {
+        // Keep E.164 format (with +)
+        normalizedPhone = normalizedPhone.replace(/\s+/g, '').trim();
+      } else {
+        // If no +, ensure it's just digits
+        normalizedPhone = normalizedPhone.replace(/\D/g, '');
+      }
+
       const payload: any = {
         calendarId,
-        firstName: contactFirstName,
-        lastName: contactLastName,
-        phone: contactPhone,
+        firstName: contactFirstName.trim(),
+        lastName: contactLastName.trim(),
+        phone: normalizedPhone,
         selectedSlot,
         selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
         notes: args.notes || '',
