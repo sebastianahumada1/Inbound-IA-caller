@@ -127,7 +127,9 @@ export class VapiWebhookHandler {
         }
         switch (message.type) {
             case 'tool-calls':
-                return await this.handleToolCalls(message.toolCallList, assistantId);
+                // Extract GHL metadata from call metadata if available
+                const ghlMetadata = message.call?.metadata?.ghl || null;
+                return await this.handleToolCalls(message.toolCallList, assistantId, ghlMetadata);
             case 'call.ended':
                 return this.handleCallEnded(message);
             case 'end-of-call-report':
@@ -148,10 +150,11 @@ export class VapiWebhookHandler {
                 };
         }
     }
-    async handleToolCalls(toolCallList, assistantId) {
+    async handleToolCalls(toolCallList, assistantId, ghlMetadata) {
         Logger.info('Processing tool calls', {
             count: toolCallList.length,
             assistantId,
+            hasGhlMetadata: !!ghlMetadata,
         });
         // Set assistant ID in GHL connector if available
         if (assistantId) {
@@ -160,7 +163,7 @@ export class VapiWebhookHandler {
         const vapiResults = [];
         // Process tool calls sequentially to avoid overwhelming GHL
         for (const toolCall of toolCallList) {
-            const result = await this.dispatchToolCall(toolCall);
+            const result = await this.dispatchToolCall(toolCall, ghlMetadata);
             // Convert to Vapi format: toolCallId and result (as string)
             let resultString;
             if (result.ok) {
@@ -186,9 +189,9 @@ export class VapiWebhookHandler {
             results: vapiResults,
         };
     }
-    async dispatchToolCall(toolCall) {
+    async dispatchToolCall(toolCall, ghlMetadata) {
         const { id, name, arguments: args } = toolCall;
-        Logger.info('Dispatching tool call', { id, name, args });
+        Logger.info('Dispatching tool call', { id, name, args, hasGhlMetadata: !!ghlMetadata });
         try {
             switch (name) {
                 case 'send_sms':
@@ -204,7 +207,7 @@ export class VapiWebhookHandler {
                 case 'check_calendar_availability':
                     return await this.handleCheckCalendarAvailability(id, args);
                 case 'schedule_appointment':
-                    return await this.handleScheduleAppointment(id, args);
+                    return await this.handleScheduleAppointment(id, args, ghlMetadata);
                 default:
                     Logger.warn('Unknown tool name', { id, name });
                     return {
@@ -326,10 +329,10 @@ export class VapiWebhookHandler {
             throw error;
         }
     }
-    async handleScheduleAppointment(id, args) {
+    async handleScheduleAppointment(id, args, ghlMetadata) {
         try {
             const validatedArgs = ScheduleAppointmentArgsSchema.parse(args);
-            return await this.ghlConnector.scheduleAppointment(id, validatedArgs);
+            return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata);
         }
         catch (error) {
             if (error instanceof ZodError) {

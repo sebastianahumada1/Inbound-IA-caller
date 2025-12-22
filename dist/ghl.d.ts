@@ -25,5 +25,5 @@ export declare class GHLConnector {
     updateStage(id: string, args: UpdateStageArgs): Promise<ToolResult>;
     addNoteByContactIdViaAPI(id: string, contactId: string, note: string): Promise<ToolResult>;
     checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs): Promise<ToolResult>;
-    scheduleAppointment(id: string, args: ScheduleAppointmentArgs): Promise<ToolResult>;
+    scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any): Promise<ToolResult>;
 }

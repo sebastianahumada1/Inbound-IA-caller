@@ -163,7 +163,9 @@ export class VapiWebhookHandler {
 
     switch (message.type) {
       case 'tool-calls':
-        return await this.handleToolCalls(message.toolCallList, assistantId);
+        // Extract GHL metadata from call metadata if available
+        const ghlMetadata = (message as any).call?.metadata?.ghl || null;
+        return await this.handleToolCalls(message.toolCallList, assistantId, ghlMetadata);
       
       case 'call.ended':
         return this.handleCallEnded(message);
@@ -192,10 +194,11 @@ export class VapiWebhookHandler {
     }
   }
 
-  private async handleToolCalls(toolCallList: VapiToolCall[], assistantId?: string): Promise<any> {
+  private async handleToolCalls(toolCallList: VapiToolCall[], assistantId?: string, ghlMetadata?: any): Promise<any> {
     Logger.info('Processing tool calls', { 
       count: toolCallList.length,
       assistantId,
+      hasGhlMetadata: !!ghlMetadata,
     });
     
     // Set assistant ID in GHL connector if available
@@ -207,7 +210,7 @@ export class VapiWebhookHandler {
 
     // Process tool calls sequentially to avoid overwhelming GHL
     for (const toolCall of toolCallList) {
-      const result = await this.dispatchToolCall(toolCall);
+      const result = await this.dispatchToolCall(toolCall, ghlMetadata);
       
       // Convert to Vapi format: toolCallId and result (as string)
       let resultString: string;
@@ -235,10 +238,10 @@ export class VapiWebhookHandler {
     };
   }
 
-  private async dispatchToolCall(toolCall: VapiToolCall): Promise<ToolResult> {
+  private async dispatchToolCall(toolCall: VapiToolCall, ghlMetadata?: any): Promise<ToolResult> {
     const { id, name, arguments: args } = toolCall;
     
-    Logger.info('Dispatching tool call', { id, name, args });
+    Logger.info('Dispatching tool call', { id, name, args, hasGhlMetadata: !!ghlMetadata });
 
     try {
       switch (name) {
@@ -261,7 +264,7 @@ export class VapiWebhookHandler {
           return await this.handleCheckCalendarAvailability(id, args);
         
         case 'schedule_appointment':
-          return await this.handleScheduleAppointment(id, args);
+          return await this.handleScheduleAppointment(id, args, ghlMetadata);
         
         default:
           Logger.warn('Unknown tool name', { id, name });
@@ -384,10 +387,10 @@ export class VapiWebhookHandler {
     }
   }
 
-  private async handleScheduleAppointment(id: string, args: any): Promise<ToolResult> {
+  private async handleScheduleAppointment(id: string, args: any, ghlMetadata?: any): Promise<ToolResult> {
     try {
       const validatedArgs = ScheduleAppointmentArgsSchema.parse(args);
-      return await this.ghlConnector.scheduleAppointment(id, validatedArgs);
+      return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata);
     } catch (error) {
       if (error instanceof ZodError) {
         Logger.error('Invalid schedule_appointment arguments', { id, errors: error.issues });

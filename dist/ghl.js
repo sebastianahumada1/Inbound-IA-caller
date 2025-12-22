@@ -562,9 +562,9 @@ export class GHLConnector {
             };
         }
     }
-    async scheduleAppointment(id, args) {
+    async scheduleAppointment(id, args, ghlMetadata) {
         try {
-            Logger.info('[CALENDAR] Processing schedule_appointment', { id, args });
+            Logger.info('[CALENDAR] Processing schedule_appointment', { id, args, hasGhlMetadata: !!ghlMetadata });
             const ghlApiKey = this.getGHLApiKey();
             if (!ghlApiKey) {
                 const error = 'GHL_API_KEY not configured for this client';
@@ -606,52 +606,79 @@ export class GHLConnector {
                     error,
                 };
             }
-            // Try to get contact details from GHL using contactId (optional - fallback to name if fails)
+            // Try to get contact details from GHL metadata first (from webhook)
             let contactPhone = '';
             let contactFirstName = '';
             let contactLastName = '';
-            Logger.info('[CALENDAR] Attempting to fetch contact details', {
-                id,
-                contactId: args.contactId,
-            });
-            try {
-                const contactResponse = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/${args.contactId}`, {
-                    headers: {
-                        'Authorization': `Bearer ${ghlApiKey}`,
-                        'Content-Type': 'application/json',
-                        'Version': '2021-07-28',
-                    },
-                });
-                if (contactResponse.ok) {
-                    const contact = contactResponse.data?.contact || contactResponse.data;
-                    contactPhone = contact.phone || contact.phoneNumber || '';
-                    contactFirstName = contact.firstName || '';
-                    contactLastName = contact.lastName || '';
-                    Logger.info('[CALENDAR] Contact details retrieved', {
-                        id,
-                        contactId: args.contactId,
-                        firstName: contactFirstName,
-                        lastName: contactLastName,
-                        phone: contactPhone,
-                    });
-                }
-                else {
-                    Logger.warn('[CALENDAR] Could not fetch contact details, will use provided name', {
-                        id,
-                        contactId: args.contactId,
-                        status: contactResponse.status,
-                        statusText: contactResponse.statusText,
-                    });
-                }
-            }
-            catch (error) {
-                Logger.warn('[CALENDAR] Error fetching contact, will use provided name', {
+            if (ghlMetadata?.contact) {
+                Logger.info('[CALENDAR] Using contact details from GHL metadata', {
                     id,
                     contactId: args.contactId,
-                    error: error instanceof Error ? error.message : 'Unknown error',
+                    hasContact: !!ghlMetadata.contact,
+                });
+                contactPhone = ghlMetadata.contact.phone || ghlMetadata.contact.phoneNumber || '';
+                contactFirstName = ghlMetadata.contact.firstName || '';
+                contactLastName = ghlMetadata.contact.lastName || '';
+                Logger.info('[CALENDAR] Contact details from metadata', {
+                    id,
+                    firstName: contactFirstName,
+                    lastName: contactLastName,
+                    phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
                 });
             }
-            // Parse name from args.name if contact details not available
+            // If metadata doesn't have all required fields, try to fetch from API
+            if (!contactPhone || !contactFirstName) {
+                Logger.info('[CALENDAR] Attempting to fetch missing contact details from API', {
+                    id,
+                    contactId: args.contactId,
+                    hasPhone: !!contactPhone,
+                    hasFirstName: !!contactFirstName,
+                });
+                try {
+                    const contactResponse = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/${args.contactId}`, {
+                        headers: {
+                            'Authorization': `Bearer ${ghlApiKey}`,
+                            'Content-Type': 'application/json',
+                            'Version': '2021-07-28',
+                        },
+                    });
+                    if (contactResponse.ok) {
+                        const contact = contactResponse.data?.contact || contactResponse.data;
+                        if (!contactPhone) {
+                            contactPhone = contact.phone || contact.phoneNumber || '';
+                        }
+                        if (!contactFirstName) {
+                            contactFirstName = contact.firstName || '';
+                        }
+                        if (!contactLastName) {
+                            contactLastName = contact.lastName || '';
+                        }
+                        Logger.info('[CALENDAR] Contact details retrieved from API', {
+                            id,
+                            contactId: args.contactId,
+                            firstName: contactFirstName,
+                            lastName: contactLastName,
+                            phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
+                        });
+                    }
+                    else {
+                        Logger.warn('[CALENDAR] Could not fetch contact details from API', {
+                            id,
+                            contactId: args.contactId,
+                            status: contactResponse.status,
+                            statusText: contactResponse.statusText,
+                        });
+                    }
+                }
+                catch (error) {
+                    Logger.warn('[CALENDAR] Error fetching contact from API', {
+                        id,
+                        contactId: args.contactId,
+                        error: error instanceof Error ? error.message : 'Unknown error',
+                    });
+                }
+            }
+            // Parse name from args.name if contact details still not available
             const nameParts = args.name.trim().split(/\s+/);
             if (!contactFirstName && !contactLastName) {
                 contactFirstName = nameParts[0] || args.name;
@@ -665,10 +692,12 @@ export class GHLConnector {
             }
             // Phone is required by GHL API, so we need to handle this
             if (!contactPhone) {
-                const error = 'Phone number is required but could not be retrieved from contact. Please ensure the contact has a phone number in GHL.';
+                const error = 'Phone number is required but could not be retrieved from contact metadata or API. Please ensure the contact has a phone number in GHL.';
                 Logger.error('[CALENDAR] ' + error, {
                     id,
                     contactId: args.contactId,
+                    hasGhlMetadata: !!ghlMetadata,
+                    hasGhlContact: !!ghlMetadata?.contact,
                 });
                 return {
                     id,
