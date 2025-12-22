@@ -549,8 +549,36 @@ export class GHLConnector {
       });
 
       const isAvailable = freeSlots.some((slot: any) => {
-        const slotStart = new Date(slot.startTime);
-        const slotEnd = new Date(slot.endTime);
+        // Handle different formats: timestamp (number) or ISO string
+        let slotStart: Date;
+        let slotEnd: Date;
+        
+        if (typeof slot.startTime === 'number') {
+          slotStart = new Date(slot.startTime);
+        } else if (typeof slot.startTime === 'string') {
+          slotStart = new Date(slot.startTime);
+        } else {
+          Logger.warn('[CALENDAR] Invalid slot startTime format', { slot });
+          return false;
+        }
+        
+        if (typeof slot.endTime === 'number') {
+          slotEnd = new Date(slot.endTime);
+        } else if (typeof slot.endTime === 'string') {
+          slotEnd = new Date(slot.endTime);
+        } else {
+          Logger.warn('[CALENDAR] Invalid slot endTime format', { slot });
+          return false;
+        }
+        
+        // Check if requested slot fits completely within the free slot
+        // requestedDate should be >= slotStart AND endDate should be <= slotEnd
+        const fitsCompletely = requestedDate.getTime() >= slotStart.getTime() && 
+                               endDate.getTime() <= slotEnd.getTime();
+        
+        // Also check if there's any overlap (more lenient check)
+        const hasOverlap = requestedDate.getTime() < slotEnd.getTime() && 
+                          endDate.getTime() > slotStart.getTime();
         
         Logger.debug('[CALENDAR] Comparing slot', {
           slotStart: slotStart.toISOString(),
@@ -561,10 +589,13 @@ export class GHLConnector {
           requestedDateTimestamp: requestedDate.getTime(),
           endDate: endDate.toISOString(),
           endDateTimestamp: endDate.getTime(),
-          fitsInSlot: requestedDate >= slotStart && endDate <= slotEnd,
+          fitsCompletely,
+          hasOverlap,
+          slotData: slot,
         });
         
-        return requestedDate >= slotStart && endDate <= slotEnd;
+        // Use fitsCompletely for strict matching (requested slot must be fully within free slot)
+        return fitsCompletely;
       });
 
       Logger.info('[CALENDAR] Availability check completed', {
