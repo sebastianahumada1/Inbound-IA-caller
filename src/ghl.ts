@@ -669,18 +669,103 @@ export class GHLConnector {
         };
       }
 
-      // Create appointment in GHL Calendar
-      const apiUrl = `https://services.leadconnectorhq.com/calendars/events`;
+      // Try to get contact details from GHL using contactId (optional - fallback to name if fails)
+      let contactPhone = '';
+      let contactFirstName = '';
+      let contactLastName = '';
+
+      Logger.info('[CALENDAR] Attempting to fetch contact details', {
+        id,
+        contactId: args.contactId,
+      });
+
+      try {
+        const contactResponse = await this.httpClient.get(
+          `https://services.leadconnectorhq.com/contacts/${args.contactId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${ghlApiKey}`,
+              'Content-Type': 'application/json',
+              'Version': '2021-07-28',
+            },
+          }
+        );
+
+        if (contactResponse.ok) {
+          const contact = contactResponse.data?.contact || contactResponse.data;
+          contactPhone = contact.phone || contact.phoneNumber || '';
+          contactFirstName = contact.firstName || '';
+          contactLastName = contact.lastName || '';
+
+          Logger.info('[CALENDAR] Contact details retrieved', {
+            id,
+            contactId: args.contactId,
+            firstName: contactFirstName,
+            lastName: contactLastName,
+            phone: contactPhone,
+          });
+        } else {
+          Logger.warn('[CALENDAR] Could not fetch contact details, will use provided name', {
+            id,
+            contactId: args.contactId,
+            status: contactResponse.status,
+            statusText: contactResponse.statusText,
+          });
+        }
+      } catch (error) {
+        Logger.warn('[CALENDAR] Error fetching contact, will use provided name', {
+          id,
+          contactId: args.contactId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+
+      // Parse name from args.name if contact details not available
+      const nameParts = args.name.trim().split(/\s+/);
+      if (!contactFirstName && !contactLastName) {
+        contactFirstName = nameParts[0] || args.name;
+        contactLastName = nameParts.slice(1).join(' ') || '';
+      } else if (!contactFirstName) {
+        contactFirstName = nameParts[0] || args.name;
+      } else if (!contactLastName) {
+        contactLastName = nameParts.slice(1).join(' ') || '';
+      }
+
+      // Phone is required by GHL API, so we need to handle this
+      if (!contactPhone) {
+        const error = 'Phone number is required but could not be retrieved from contact. Please ensure the contact has a phone number in GHL.';
+        Logger.error('[CALENDAR] ' + error, { 
+          id, 
+          contactId: args.contactId,
+        });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      // Create appointment in GHL Calendar using the correct endpoint
+      // GHL requires: /calendars/events/appointments with firstName, lastName, phone, selectedSlot
+      const apiUrl = `https://services.leadconnectorhq.com/calendars/events/appointments`;
       
-      // GHL may require timestamps (numbers) instead of ISO strings for events
-      // Try with timestamps first (like we did for free-slots)
+      // GHL expects selectedSlot as ISO string with timezone
+      // Convert startTime to ISO string with timezone (EST)
+      // If startTime is already in correct format, use it; otherwise convert
+      let selectedSlot = args.startTime;
+      if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00')) {
+        // If no timezone, assume EST and add it
+        const date = new Date(args.startTime);
+        selectedSlot = date.toISOString().replace('Z', '-05:00');
+      }
+
       const payload = {
         calendarId,
-        contactId: args.contactId,
-        startTime: startTime.getTime(),
-        endTime: endTime.getTime(),
-        title: `Appointment with ${args.name}`,
-        appointmentStatus: 'confirmed',
+        firstName: contactFirstName,
+        lastName: contactLastName,
+        phone: contactPhone,
+        selectedSlot,
+        selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
         notes: args.notes || '',
       };
 
@@ -688,10 +773,9 @@ export class GHLConnector {
         id,
         calendarId,
         contactId: args.contactId,
+        selectedSlot,
         startTime: startTime.toISOString(),
-        startTimeTimestamp: startTime.getTime(),
         endTime: endTime.toISOString(),
-        endTimeTimestamp: endTime.getTime(),
         payload,
       });
 
