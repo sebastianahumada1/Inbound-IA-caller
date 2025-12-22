@@ -660,6 +660,42 @@ export class GHLConnector {
         };
       }
 
+      // Try to get locationId from calendar info (some GHL endpoints require it)
+      let locationId: string | undefined;
+      try {
+        const calendarResponse = await this.httpClient.get(
+          `https://services.leadconnectorhq.com/calendars/${calendarId}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${ghlApiKey}`,
+              'Content-Type': 'application/json',
+              'Version': '2021-07-28',
+            },
+          }
+        );
+
+        if (calendarResponse.ok) {
+          locationId = calendarResponse.data?.locationId || calendarResponse.data?.location?.id;
+          Logger.info('[CALENDAR] Retrieved locationId from calendar', {
+            id,
+            calendarId,
+            locationId,
+          });
+        } else {
+          Logger.warn('[CALENDAR] Could not retrieve calendar info for locationId', {
+            id,
+            calendarId,
+            status: calendarResponse.status,
+          });
+        }
+      } catch (error) {
+        Logger.warn('[CALENDAR] Error retrieving calendar info for locationId', {
+          id,
+          calendarId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+
       // Validate date formats
       const startTime = new Date(args.startTime);
       const endTime = new Date(args.endTime);
@@ -815,7 +851,7 @@ export class GHLConnector {
         selectedSlot = date.toISOString().replace('Z', '-05:00');
       }
 
-      const payload = {
+      const payload: any = {
         calendarId,
         firstName: contactFirstName,
         lastName: contactLastName,
@@ -824,6 +860,15 @@ export class GHLConnector {
         selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
         notes: args.notes || '',
       };
+
+      // Add locationId if available (some GHL endpoints require it)
+      if (locationId) {
+        payload.locationId = locationId;
+        Logger.info('[CALENDAR] Added locationId to payload', {
+          id,
+          locationId,
+        });
+      }
 
       Logger.info('[CALENDAR] Creating appointment in GHL', {
         id,
