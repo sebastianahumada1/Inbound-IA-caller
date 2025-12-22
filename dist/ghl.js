@@ -450,8 +450,8 @@ export class GHLConnector {
             const endDateRange = new Date(requestedDate.getTime() + 2 * 60 * 60000); // 2 hours after
             const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
             const params = new URLSearchParams({
-                startDate: startDate.toISOString(),
-                endDate: endDateRange.toISOString(),
+                startDate: startDate.getTime().toString(),
+                endDate: endDateRange.getTime().toString(),
             });
             Logger.info('[CALENDAR] Querying GHL Calendar API', {
                 id,
