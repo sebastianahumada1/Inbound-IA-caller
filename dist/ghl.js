@@ -608,11 +608,13 @@ export class GHLConnector {
             }
             // Create appointment in GHL Calendar
             const apiUrl = `https://services.leadconnectorhq.com/calendars/events`;
+            // GHL may require timestamps (numbers) instead of ISO strings for events
+            // Try with timestamps first (like we did for free-slots)
             const payload = {
                 calendarId,
                 contactId: args.contactId,
-                startTime: startTime.toISOString(),
-                endTime: endTime.toISOString(),
+                startTime: startTime.getTime(),
+                endTime: endTime.getTime(),
                 title: `Appointment with ${args.name}`,
                 appointmentStatus: 'confirmed',
                 notes: args.notes || '',
@@ -622,7 +624,10 @@ export class GHLConnector {
                 calendarId,
                 contactId: args.contactId,
                 startTime: startTime.toISOString(),
+                startTimeTimestamp: startTime.getTime(),
                 endTime: endTime.toISOString(),
+                endTimeTimestamp: endTime.getTime(),
+                payload,
             });
             const response = await this.httpClient.post(apiUrl, payload, {
                 headers: {
@@ -636,6 +641,7 @@ export class GHLConnector {
                     id,
                     appointmentId: response.data?.id,
                     contactId: args.contactId,
+                    responseData: response.data,
                 });
                 return {
                     id,
@@ -651,12 +657,23 @@ export class GHLConnector {
                 };
             }
             else {
+                const errorDetails = response.data ? JSON.stringify(response.data) : 'No error details';
                 const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
-                Logger.error('[CALENDAR] ' + error, { id, responseData: response.data });
+                Logger.error('[CALENDAR] ' + error, {
+                    id,
+                    calendarId,
+                    contactId: args.contactId,
+                    apiUrl,
+                    payload,
+                    responseData: response.data,
+                    responseStatus: response.status,
+                    responseStatusText: response.statusText,
+                    fullResponse: JSON.stringify(response.data),
+                });
                 return {
                     id,
                     ok: false,
-                    error,
+                    error: `${error}. Details: ${errorDetails}`,
                 };
             }
         }
