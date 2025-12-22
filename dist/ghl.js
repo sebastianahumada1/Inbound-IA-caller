@@ -833,16 +833,24 @@ export class GHLConnector {
             // Ensure firstName and lastName are not empty (GHL requires both)
             const finalFirstName = contactFirstName.trim() || 'Guest';
             const finalLastName = contactLastName.trim() || finalFirstName; // Use firstName if lastName is empty
-            // GHL might require email or contactId instead of just phone
-            // Try to create/update contact first if we have contactId
+            // Get contactId from metadata first (if call exists, contact exists in GHL)
             let contactIdToUse = args.contactId;
-            // If we have contactId, try to use it; otherwise create contact first
-            if (!contactIdToUse) {
-                // Try to find or create contact using phone
-                try {
-                    Logger.info('[CALENDAR] Attempting to find/create contact before scheduling', {
+            // Try to get contactId from GHL metadata (from webhook)
+            if (!contactIdToUse && ghlMetadata) {
+                contactIdToUse = ghlMetadata.contactId || ghlMetadata.contact?.id;
+                if (contactIdToUse) {
+                    Logger.info('[CALENDAR] Using contactId from GHL metadata', {
                         id,
-                        phone: normalizedPhone,
+                        contactId: contactIdToUse,
+                    });
+                }
+            }
+            // If still no contactId, try to find existing contact by phone (don't create - contact should exist if call happened)
+            if (!contactIdToUse && normalizedPhone) {
+                try {
+                    Logger.info('[CALENDAR] Searching for existing contact by phone', {
+                        id,
+                        phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
                     });
                     // Search for contact by phone
                     const searchResponse = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(normalizedPhone)}`, {
@@ -854,36 +862,20 @@ export class GHLConnector {
                     });
                     if (searchResponse.ok && searchResponse.data?.contacts?.length > 0) {
                         contactIdToUse = searchResponse.data.contacts[0].id;
-                        Logger.info('[CALENDAR] Found existing contact', {
+                        Logger.info('[CALENDAR] Found existing contact by phone', {
                             id,
                             contactId: contactIdToUse,
                         });
                     }
                     else {
-                        // Create new contact
-                        const createContactResponse = await this.httpClient.post('https://services.leadconnectorhq.com/contacts', {
-                            firstName: finalFirstName,
-                            lastName: finalLastName,
-                            phone: normalizedPhone,
-                            locationId: locationId,
-                        }, {
-                            headers: {
-                                'Authorization': `Bearer ${ghlApiKey}`,
-                                'Content-Type': 'application/json',
-                                'Version': '2021-07-28',
-                            },
+                        Logger.warn('[CALENDAR] Contact not found by phone, will use firstName/lastName/phone', {
+                            id,
+                            phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
                         });
-                        if (createContactResponse.ok) {
-                            contactIdToUse = createContactResponse.data?.contact?.id || createContactResponse.data?.id;
-                            Logger.info('[CALENDAR] Created new contact', {
-                                id,
-                                contactId: contactIdToUse,
-                            });
-                        }
                     }
                 }
                 catch (error) {
-                    Logger.warn('[CALENDAR] Could not find/create contact, will try without contactId', {
+                    Logger.warn('[CALENDAR] Could not search for contact, will use firstName/lastName/phone', {
                         id,
                         error: error instanceof Error ? error.message : 'Unknown error',
                     });
