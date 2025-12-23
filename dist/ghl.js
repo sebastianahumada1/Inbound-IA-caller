@@ -881,21 +881,32 @@ export class GHLConnector {
                     });
                 }
             }
+            // GHL might require contactId OR firstName/lastName/phone, but not both
+            // If we have contactId, use only that; otherwise use firstName/lastName/phone
             const payload = {
                 calendarId,
-                firstName: finalFirstName,
-                lastName: finalLastName,
-                phone: normalizedPhone,
                 selectedSlot,
                 selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
                 notes: args.notes || '',
             };
-            // Add contactId if available (GHL might prefer this over firstName/lastName/phone)
             if (contactIdToUse) {
+                // Use contactId if available (preferred by GHL)
                 payload.contactId = contactIdToUse;
-                Logger.info('[CALENDAR] Added contactId to payload', {
+                Logger.info('[CALENDAR] Using contactId in payload (preferred)', {
                     id,
                     contactId: contactIdToUse,
+                });
+            }
+            else {
+                // Fallback to firstName/lastName/phone if no contactId
+                payload.firstName = finalFirstName;
+                payload.lastName = finalLastName;
+                payload.phone = normalizedPhone;
+                Logger.info('[CALENDAR] Using firstName/lastName/phone in payload (fallback)', {
+                    id,
+                    firstName: finalFirstName,
+                    lastName: finalLastName,
+                    phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
                 });
             }
             // Add locationId if available (some GHL endpoints require it)
