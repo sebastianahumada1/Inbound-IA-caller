@@ -5,7 +5,12 @@
  * Simulates Vapi webhook call locally without making actual phone calls
  * 
  * Usage:
+ *   node scripts/test-schedule-appointment-local.js [name] [phone] [startTime] [endTime] [notes] [contactId]
+ * 
+ * Examples:
  *   node scripts/test-schedule-appointment-local.js
+ *   node scripts/test-schedule-appointment-local.js "John Doe" "+1234567890" "2025-12-24T14:00:00-05:00" "2025-12-24T14:30:00-05:00"
+ *   node scripts/test-schedule-appointment-local.js "John Doe" "+1234567890" "2025-12-24T14:00:00-05:00" "2025-12-24T14:30:00-05:00" "Test notes" "CONTACT_ID_123"
  */
 
 import dotenv from 'dotenv';
@@ -61,14 +66,20 @@ async function testScheduleAppointment() {
   const ghlConnector = new GHLConnector(assistantId);
   ghlConnector.setAssistantId(assistantId);
 
-  // Test arguments
+  // Test arguments - puedes modificar estos valores
   const testArgs = {
-    name: 'Sebastian Developer',
-    phone: '+573008669878',
-    startTime: '2025-12-23T10:00:00-05:00',
-    endTime: '2025-12-23T10:30:00-05:00',
-    notes: 'Test appointment from local script',
+    name: process.argv[2] || 'Sebastian Developer',
+    phone: process.argv[3] || '+573008669878',
+    startTime: process.argv[4] || '2025-12-24T14:00:00-05:00',
+    endTime: process.argv[5] || '2025-12-24T14:30:00-05:00',
+    notes: process.argv[6] || 'Test appointment from local script',
+    contactId: process.argv[7] || undefined, // Opcional: pasar contactId si lo tienes
   };
+  
+  // Si se pasa contactId como argumento, usarlo
+  if (testArgs.contactId === 'undefined' || testArgs.contactId === '') {
+    delete testArgs.contactId;
+  }
 
   console.log('📞 Test Arguments:');
   console.log(JSON.stringify(testArgs, null, 2));

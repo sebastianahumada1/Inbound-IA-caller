@@ -128,10 +128,12 @@ export class VapiWebhookHandler {
         switch (message.type) {
             case 'tool-calls':
                 // Extract GHL metadata from call metadata if available
+                // GHL sends metadata.ghl.contactId when it triggers Vapi
                 const ghlMetadata = message.call?.metadata?.ghl || null;
                 Logger.info('[VAPI] Extracted GHL metadata for tool-calls', {
                     hasGhlMetadata: !!ghlMetadata,
                     ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
+                    contactId: ghlMetadata?.contactId,
                     hasContact: !!ghlMetadata?.contact,
                     contactKeys: ghlMetadata?.contact ? Object.keys(ghlMetadata.contact) : [],
                     contactPhone: ghlMetadata?.contact?.phone,

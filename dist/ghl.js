@@ -710,16 +710,18 @@ export class GHLConnector {
                     phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
                 });
             }
-            // Parse name from args.name
-            const nameParts = args.name.trim().split(/\s+/);
-            if (!contactFirstName) {
-                contactFirstName = nameParts[0] || args.name;
-            }
-            if (!contactLastName) {
-                contactLastName = nameParts.slice(1).join(' ') || '';
-                // GHL might require lastName, use firstName if empty
-                if (!contactLastName && contactFirstName) {
-                    contactLastName = contactFirstName;
+            // Parse name from args.name (only if we don't have it from metadata)
+            if (!contactFirstName || !contactLastName) {
+                const nameParts = args.name.trim().split(/\s+/);
+                if (!contactFirstName) {
+                    contactFirstName = nameParts[0] || args.name;
+                }
+                if (!contactLastName) {
+                    contactLastName = nameParts.slice(1).join(' ') || '';
+                    // GHL might require lastName, use firstName if empty
+                    if (!contactLastName && contactFirstName) {
+                        contactLastName = contactFirstName;
+                    }
                 }
             }
             // Normalize phone (remove spaces and special characters, keep + and numbers)
@@ -830,12 +832,9 @@ export class GHLConnector {
                 });
                 normalizedPhone = '+' + normalizedPhone;
             }
-            // Ensure firstName and lastName are not empty (GHL requires both)
-            const finalFirstName = contactFirstName.trim() || 'Guest';
-            const finalLastName = contactLastName.trim() || finalFirstName; // Use firstName if lastName is empty
-            // Get contactId from metadata first (if call exists, contact exists in GHL)
+            // Get contactId - contact always exists if call happened, so we must find it
             let contactIdToUse = args.contactId;
-            // Try to get contactId from GHL metadata (from webhook)
+            // Priority 1: Try to get contactId from GHL metadata (from webhook)
             if (!contactIdToUse && ghlMetadata) {
                 contactIdToUse = ghlMetadata.contactId || ghlMetadata.contact?.id;
                 if (contactIdToUse) {
@@ -845,78 +844,108 @@ export class GHLConnector {
                     });
                 }
             }
-            // If still no contactId, try to find existing contact by phone (don't create - contact should exist if call happened)
+            // Priority 2: Search for existing contact by phone (contact always exists)
             if (!contactIdToUse && normalizedPhone) {
                 try {
                     Logger.info('[CALENDAR] Searching for existing contact by phone', {
                         id,
                         phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
                     });
-                    // Search for contact by phone
-                    const searchResponse = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(normalizedPhone)}`, {
+                    // Try different search endpoints/formats
+                    // Option 1: Search by phone with + prefix
+                    let searchResponse = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(normalizedPhone)}`, {
                         headers: {
                             'Authorization': `Bearer ${ghlApiKey}`,
                             'Content-Type': 'application/json',
                             'Version': '2021-07-28',
                         },
                     });
-                    if (searchResponse.ok && searchResponse.data?.contacts?.length > 0) {
-                        contactIdToUse = searchResponse.data.contacts[0].id;
-                        Logger.info('[CALENDAR] Found existing contact by phone', {
-                            id,
-                            contactId: contactIdToUse,
+                    // Option 2: If that fails, try without + prefix
+                    if (!searchResponse.ok && normalizedPhone.startsWith('+')) {
+                        const phoneWithoutPlus = normalizedPhone.substring(1);
+                        searchResponse = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(phoneWithoutPlus)}`, {
+                            headers: {
+                                'Authorization': `Bearer ${ghlApiKey}`,
+                                'Content-Type': 'application/json',
+                                'Version': '2021-07-28',
+                            },
                         });
                     }
+                    if (searchResponse.ok) {
+                        const contacts = searchResponse.data?.contacts || searchResponse.data?.data?.contacts || [];
+                        if (contacts.length > 0) {
+                            contactIdToUse = contacts[0].id;
+                            Logger.info('[CALENDAR] Found existing contact by phone', {
+                                id,
+                                contactId: contactIdToUse,
+                                phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+                            });
+                        }
+                        else {
+                            Logger.warn('[CALENDAR] No contacts found by phone search', {
+                                id,
+                                phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+                                responseData: searchResponse.data,
+                            });
+                        }
+                    }
                     else {
-                        Logger.warn('[CALENDAR] Contact not found by phone, will use firstName/lastName/phone', {
+                        Logger.warn('[CALENDAR] Contact search failed', {
                             id,
                             phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+                            status: searchResponse.status,
+                            statusText: searchResponse.statusText,
                         });
                     }
                 }
                 catch (error) {
-                    Logger.warn('[CALENDAR] Could not search for contact, will use firstName/lastName/phone', {
+                    Logger.warn('[CALENDAR] Error searching for contact', {
                         id,
                         error: error instanceof Error ? error.message : 'Unknown error',
                     });
                 }
             }
-            // GHL API might require specific format - try contactId first, then firstName/lastName/phone
-            // Also try phone without + prefix as GHL might expect different format
+            // If we still don't have contactId, we can't proceed - contact must exist
+            if (!contactIdToUse && normalizedPhone) {
+                const error = `Contact ID is required but could not be found. The contact should exist in GHL (phone: ${normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing'}). Please ensure the contact exists or provide contactId in the arguments.`;
+                Logger.error('[CALENDAR] ' + error, {
+                    id,
+                    phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+                    hasGhlMetadata: !!ghlMetadata,
+                    ghlMetadataContactId: ghlMetadata?.contactId || ghlMetadata?.contact?.id,
+                });
+                return {
+                    id,
+                    ok: false,
+                    error,
+                };
+            }
+            // GHL requires contactId - we should have it by now since contact always exists
+            if (!contactIdToUse) {
+                const error = 'Contact ID is required to schedule appointment. Contact should exist in GHL but could not be found.';
+                Logger.error('[CALENDAR] ' + error, {
+                    id,
+                    phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+                });
+                return {
+                    id,
+                    ok: false,
+                    error,
+                };
+            }
+            // Use contactId in payload (required by GHL)
             const payload = {
                 calendarId,
+                contactId: contactIdToUse,
                 selectedSlot,
                 selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
                 notes: args.notes || '',
             };
-            if (contactIdToUse) {
-                // Use contactId if available (preferred by GHL)
-                payload.contactId = contactIdToUse;
-                Logger.info('[CALENDAR] Using contactId in payload (preferred)', {
-                    id,
-                    contactId: contactIdToUse,
-                });
-            }
-            else {
-                // Fallback to firstName/lastName/phone if no contactId
-                // Try phone without + prefix first (GHL might expect digits only)
-                let phoneForPayload = normalizedPhone;
-                if (phoneForPayload.startsWith('+')) {
-                    // Try without + prefix
-                    phoneForPayload = phoneForPayload.substring(1);
-                }
-                payload.firstName = finalFirstName;
-                payload.lastName = finalLastName;
-                payload.phone = phoneForPayload;
-                Logger.info('[CALENDAR] Using firstName/lastName/phone in payload (fallback)', {
-                    id,
-                    firstName: finalFirstName,
-                    lastName: finalLastName,
-                    phone: phoneForPayload ? '***' + phoneForPayload.slice(-4) : 'missing',
-                    phoneWithPlus: normalizedPhone,
-                    phoneWithoutPlus: phoneForPayload,
-                });
-            }
+            Logger.info('[CALENDAR] Using contactId in payload', {
+                id,
+                contactId: contactIdToUse,
+                payload: { ...payload, contactId: contactIdToUse },
+            });
             // Add locationId if available (some GHL endpoints require it)
             if (locationId) {
                 payload.locationId = locationId;
