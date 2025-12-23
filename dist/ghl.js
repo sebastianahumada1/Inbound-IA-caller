@@ -881,8 +881,8 @@ export class GHLConnector {
                     });
                 }
             }
-            // GHL might require contactId OR firstName/lastName/phone, but not both
-            // If we have contactId, use only that; otherwise use firstName/lastName/phone
+            // GHL API might require specific format - try contactId first, then firstName/lastName/phone
+            // Also try phone without + prefix as GHL might expect different format
             const payload = {
                 calendarId,
                 selectedSlot,
@@ -899,14 +899,22 @@ export class GHLConnector {
             }
             else {
                 // Fallback to firstName/lastName/phone if no contactId
+                // Try phone without + prefix first (GHL might expect digits only)
+                let phoneForPayload = normalizedPhone;
+                if (phoneForPayload.startsWith('+')) {
+                    // Try without + prefix
+                    phoneForPayload = phoneForPayload.substring(1);
+                }
                 payload.firstName = finalFirstName;
                 payload.lastName = finalLastName;
-                payload.phone = normalizedPhone;
+                payload.phone = phoneForPayload;
                 Logger.info('[CALENDAR] Using firstName/lastName/phone in payload (fallback)', {
                     id,
                     firstName: finalFirstName,
                     lastName: finalLastName,
-                    phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+                    phone: phoneForPayload ? '***' + phoneForPayload.slice(-4) : 'missing',
+                    phoneWithPlus: normalizedPhone,
+                    phoneWithoutPlus: phoneForPayload,
                 });
             }
             // Add locationId if available (some GHL endpoints require it)
