@@ -38,12 +38,28 @@ export class ClientConfigManager {
         slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS',
       },
       {
+        name: 'Premier Wellness Back Neck',
+        assistantIdVar: 'PREMIER_WELLNESS_BACK_NECK_ASSISTANT_ID',
+        apiKeyVar: 'PREMIER_WELLNESS_BACK_NECK_GHL_API_KEY',
+        calendarIdVar: 'PREMIER_WELLNESS_BACK_NECK_CALENDAR_ID',
+        locationIdVar: 'PREMIER_WELLNESS_BACK_NECK_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS_BACK_NECK',
+      },
+      {
         name: 'West Texas',
         assistantIdVar: 'WEST_TEXAS_ASSISTANT_ID',
         apiKeyVar: 'WEST_TEXAS_GHL_API_KEY',
         calendarIdVar: 'WEST_TEXAS_CALENDAR_ID',
         locationIdVar: 'WEST_TEXAS_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS',
+      },
+      {
+        name: 'West Texas Back Neck',
+        assistantIdVar: 'WEST_TEXAS_BACK_NECK_ASSISTANT_ID',
+        apiKeyVar: 'WEST_TEXAS_BACK_NECK_GHL_API_KEY',
+        calendarIdVar: 'WEST_TEXAS_BACK_NECK_CALENDAR_ID',
+        locationIdVar: 'WEST_TEXAS_BACK_NECK_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS_BACK_NECK',
       },
       {
         name: 'Third Client',
@@ -68,6 +84,22 @@ export class ClientConfigManager {
         calendarIdVar: 'NUVIVE_CALENDAR_ID',
         locationIdVar: 'NUVIVE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE',
+      },
+      {
+        name: 'NuVive Back Neck',
+        assistantIdVar: 'NUVIVE_BACK_NECK_ASSISTANT_ID',
+        apiKeyVar: 'NUVIVE_BACK_NECK_GHL_API_KEY',
+        calendarIdVar: 'NUVIVE_BACK_NECK_CALENDAR_ID',
+        locationIdVar: 'NUVIVE_BACK_NECK_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE_BACK_NECK',
+      },
+      {
+        name: 'Jennings Back Neck',
+        assistantIdVar: 'JENNINGS_BACK_NECK_ASSISTANT_ID',
+        apiKeyVar: 'JENNINGS_BACK_NECK_GHL_API_KEY',
+        calendarIdVar: 'JENNINGS_BACK_NECK_CALENDAR_ID',
+        locationIdVar: 'JENNINGS_BACK_NECK_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_JENNINGS_BACK_NECK',
       },
     ];
 
