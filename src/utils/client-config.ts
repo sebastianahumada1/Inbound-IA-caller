@@ -38,14 +38,6 @@ export class ClientConfigManager {
         slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS',
       },
       {
-        name: 'Premier Wellness Back Neck',
-        assistantIdVar: 'PREMIER_WELLNESS_BACK_NECK_ASSISTANT_ID',
-        apiKeyVar: 'PREMIER_WELLNESS_BACK_NECK_GHL_API_KEY',
-        calendarIdVar: 'PREMIER_WELLNESS_BACK_NECK_CALENDAR_ID',
-        locationIdVar: 'PREMIER_WELLNESS_BACK_NECK_LOCATION_ID',
-        slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS_BACK_NECK',
-      },
-      {
         name: 'West Texas',
         assistantIdVar: 'WEST_TEXAS_ASSISTANT_ID',
         apiKeyVar: 'WEST_TEXAS_GHL_API_KEY',
@@ -159,6 +151,30 @@ export class ClientConfigManager {
         hasCalendarId: !!calendarId,
         hasSlackChannel: !!slackChannel,
       });
+    }
+
+    // Register alias assistant IDs that share the same configuration
+    // Premier Wellness Back Neck uses the same config as Premier Wellness
+    const premierWellnessAssistantId = process.env['PREMIER_WELLNESS_ASSISTANT_ID'];
+    const premierWellnessBackNeckAssistantId = process.env['PREMIER_WELLNESS_BACK_NECK_ASSISTANT_ID'];
+    
+    if (premierWellnessAssistantId && premierWellnessBackNeckAssistantId) {
+      const premierConfig = this.configs.get(premierWellnessAssistantId);
+      if (premierConfig) {
+        // Create a copy with the alias name for logging purposes
+        const aliasConfig: ClientConfig = {
+          ...premierConfig,
+          name: 'Premier Wellness Back Neck',
+          assistantId: premierWellnessBackNeckAssistantId,
+        };
+        this.configs.set(premierWellnessBackNeckAssistantId, aliasConfig);
+        configuredClients.push('Premier Wellness Back Neck (alias)');
+        
+        Logger.info('[CLIENT_CONFIG] Registered alias: Premier Wellness Back Neck -> Premier Wellness', {
+          aliasAssistantId: premierWellnessBackNeckAssistantId.substring(0, 8) + '...',
+          parentAssistantId: premierWellnessAssistantId.substring(0, 8) + '...',
+        });
+      }
     }
 
     // Log initialization summary
