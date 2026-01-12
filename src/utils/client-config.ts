@@ -177,18 +177,38 @@ export class ClientConfigManager {
     if (premierWellnessAssistantId && premierWellnessBackNeckAssistantId) {
       const premierConfig = this.configs.get(premierWellnessAssistantId);
       if (premierConfig) {
-        // Create a copy with the alias name for logging purposes
+        // Create a copy with ALL properties from Premier Wellness, explicitly copying each property
         const aliasConfig: ClientConfig = {
-          ...premierConfig,
           name: 'Premier Wellness Back Neck',
           assistantId: premierWellnessBackNeckAssistantId,
+          ghlApiKey: premierConfig.ghlApiKey,
         };
+        
+        // Copy optional properties only if they exist
+        if (premierConfig.calendarId) {
+          aliasConfig.calendarId = premierConfig.calendarId;
+        }
+        if (premierConfig.locationId) {
+          aliasConfig.locationId = premierConfig.locationId;
+        }
+        if (premierConfig.slackChannelId) {
+          aliasConfig.slackChannelId = premierConfig.slackChannelId;
+        }
+        
         this.configs.set(premierWellnessBackNeckAssistantId, aliasConfig);
         configuredClients.push('Premier Wellness Back Neck (alias)');
         
         Logger.info('[CLIENT_CONFIG] Registered alias: Premier Wellness Back Neck -> Premier Wellness', {
           aliasAssistantId: premierWellnessBackNeckAssistantId.substring(0, 8) + '...',
           parentAssistantId: premierWellnessAssistantId.substring(0, 8) + '...',
+          hasGhlApiKey: !!aliasConfig.ghlApiKey,
+          hasCalendarId: !!aliasConfig.calendarId,
+          hasLocationId: !!aliasConfig.locationId,
+          hasSlackChannelId: !!aliasConfig.slackChannelId,
+        });
+      } else {
+        Logger.warn('[CLIENT_CONFIG] Cannot create alias: Premier Wellness config not found', {
+          premierWellnessAssistantId: premierWellnessAssistantId.substring(0, 8) + '...',
         });
       }
     }
