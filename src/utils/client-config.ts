@@ -93,6 +93,22 @@ export class ClientConfigManager {
         locationIdVar: 'JENNINGS_BACK_NECK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_JENNINGS_BACK_NECK',
       },
+      {
+        name: 'NuWave',
+        assistantIdVar: 'NUWAVE_ASSISTANT_ID',
+        apiKeyVar: 'NUWAVE_GHL_API_KEY',
+        calendarIdVar: 'NUWAVE_CALENDAR_ID',
+        locationIdVar: 'NUWAVE_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_NUWAVE',
+      },
+      {
+        name: 'ReliefSource',
+        assistantIdVar: 'RELIEFSOURCE_ASSISTANT_ID',
+        apiKeyVar: 'RELIEFSOURCE_GHL_API_KEY',
+        calendarIdVar: 'RELIEFSOURCE_CALENDAR_ID',
+        locationIdVar: 'RELIEFSOURCE_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_RELIEFSOURCE',
+      },
     ];
 
     const missingConfigs: string[] = [];

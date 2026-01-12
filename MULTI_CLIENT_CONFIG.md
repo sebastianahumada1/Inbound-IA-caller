@@ -11,7 +11,7 @@ The system now supports multiple clients, each with their own:
 
 ## Configured Clients
 
-The system supports 5 clients, each configured via environment variables:
+The system supports 7 clients, each configured via environment variables:
 
 ### 1. Premier Wellness
 - **Environment Variables**:
@@ -42,6 +42,20 @@ The system supports 5 clients, each configured via environment variables:
   - `NUVIVE_ASSISTANT_ID`
   - `NUVIVE_GHL_API_KEY`
   - `SLACK_CHANNEL_ID_NUVIVE` (optional)
+
+### 6. NuWave
+- **Environment Variables**:
+  - `NUWAVE_ASSISTANT_ID`
+  - `NUWAVE_GHL_API_KEY`
+  - `NUWAVE_LOCATION_ID`
+  - `SLACK_CHANNEL_ID_NUWAVE` (optional)
+
+### 7. ReliefSource
+- **Environment Variables**:
+  - `RELIEFSOURCE_ASSISTANT_ID`
+  - `RELIEFSOURCE_GHL_API_KEY`
+  - `RELIEFSOURCE_LOCATION_ID`
+  - `SLACK_CHANNEL_ID_RELIEFSOURCE` (optional)
 
 ## How It Works
 
@@ -165,6 +179,22 @@ SLACK_CHANNEL_ID_DATA_DRIVEN_PRACTICES=C09J96WA942  # Optional
 NUVIVE_ASSISTANT_ID=f395ec8a-e186-4faa-9ea5-ba9bc9b74532
 NUVIVE_GHL_API_KEY=pit-71f1a99a-26f0-49f3-9ca8-e07d2771de6b
 SLACK_CHANNEL_ID_NUVIVE=C09J96WA942  # Optional
+```
+
+**NuWave:**
+```env
+NUWAVE_ASSISTANT_ID=your-assistant-id-here
+NUWAVE_GHL_API_KEY=your-ghl-api-key-here
+NUWAVE_LOCATION_ID=your-location-id-here
+SLACK_CHANNEL_ID_NUWAVE=C09J96WA942  # Optional
+```
+
+**ReliefSource:**
+```env
+RELIEFSOURCE_ASSISTANT_ID=your-assistant-id-here
+RELIEFSOURCE_GHL_API_KEY=your-ghl-api-key-here
+RELIEFSOURCE_LOCATION_ID=your-location-id-here
+SLACK_CHANNEL_ID_RELIEFSOURCE=C09J96WA942  # Optional
 ```
 
 ### Fallback
