@@ -11,7 +11,7 @@ The system now supports multiple clients, each with their own:
 
 ## Configured Clients
 
-The system supports 7 clients, each configured via environment variables:
+The system supports 10 clients, each configured via environment variables:
 
 ### 1. Premier Wellness
 - **Environment Variables**:
@@ -56,6 +56,30 @@ The system supports 7 clients, each configured via environment variables:
   - `RELIEFSOURCE_GHL_API_KEY`
   - `RELIEFSOURCE_LOCATION_ID`
   - `SLACK_CHANNEL_ID_RELIEFSOURCE` (optional)
+
+### 8. Belden Village
+- **Environment Variables**:
+  - `BELDEN_VILLAGE_ASSISTANT_ID`
+  - `BELDEN_VILLAGE_GHL_API_KEY`
+  - `BELDEN_VILLAGE_CALENDAR_ID`
+  - `BELDEN_VILLAGE_LOCATION_ID`
+  - `SLACK_CHANNEL_ID_BELDEN_VILLAGE` (optional)
+
+### 9. James Health Center
+- **Environment Variables**:
+  - `JAMES_HEALTH_CENTER_ASSISTANT_ID`
+  - `JAMES_HEALTH_CENTER_GHL_API_KEY`
+  - `JAMES_HEALTH_CENTER_CALENDAR_ID`
+  - `JAMES_HEALTH_CENTER_LOCATION_ID`
+  - `SLACK_CHANNEL_ID_JAMES_HEALTH_CENTER` (optional)
+
+### 10. Amplify Life Baldwin
+- **Environment Variables**:
+  - `AMPLIFY_LIFE_BALDWIN_ASSISTANT_ID`
+  - `AMPLIFY_LIFE_BALDWIN_GHL_API_KEY`
+  - `AMPLIFY_LIFE_BALDWIN_CALENDAR_ID`
+  - `AMPLIFY_LIFE_BALDWIN_LOCATION_ID`
+  - `SLACK_CHANNEL_ID_AMPLIFY_LIFE_BALDWIN` (optional)
 
 ## How It Works
 
@@ -195,6 +219,33 @@ RELIEFSOURCE_ASSISTANT_ID=your-assistant-id-here
 RELIEFSOURCE_GHL_API_KEY=your-ghl-api-key-here
 RELIEFSOURCE_LOCATION_ID=your-location-id-here
 SLACK_CHANNEL_ID_RELIEFSOURCE=C09J96WA942  # Optional
+```
+
+**Belden Village:**
+```env
+BELDEN_VILLAGE_ASSISTANT_ID=3d52a7a0-0b46-424e-b310-9052e80011fa
+BELDEN_VILLAGE_GHL_API_KEY=pit-a143e5bc-ce8f-40cc-a434-78a4790ee97c
+BELDEN_VILLAGE_CALENDAR_ID=cic8aj2LXsB4S5tgb210
+BELDEN_VILLAGE_LOCATION_ID=3d2YNQtSBVrmzOyEbxVP
+SLACK_CHANNEL_ID_BELDEN_VILLAGE=C09J96WA942  # Optional
+```
+
+**James Health Center:**
+```env
+JAMES_HEALTH_CENTER_ASSISTANT_ID=ae7f106a-a972-40f9-8c6c-f9dbc5d09238
+JAMES_HEALTH_CENTER_GHL_API_KEY=pit-c8425e48-3f16-48d0-b776-f5fac11a3998
+JAMES_HEALTH_CENTER_CALENDAR_ID=UDMvr43CrSzH0PaJJo1W
+JAMES_HEALTH_CENTER_LOCATION_ID=BjUFioqjb2ozznSgZmcP
+SLACK_CHANNEL_ID_JAMES_HEALTH_CENTER=C09J96WA942  # Optional
+```
+
+**Amplify Life Baldwin:**
+```env
+AMPLIFY_LIFE_BALDWIN_ASSISTANT_ID=31a3da72-c9a2-48b3-8468-9d84f9bda8c5
+AMPLIFY_LIFE_BALDWIN_GHL_API_KEY=pit-9150ff4f-898b-4a86-a675-fb10a446b3ab
+AMPLIFY_LIFE_BALDWIN_CALENDAR_ID=xYizWvqrBzFQ4WvxjhXk
+AMPLIFY_LIFE_BALDWIN_LOCATION_ID=nJiRZxRlrhZI9BxTJY4w
+SLACK_CHANNEL_ID_AMPLIFY_LIFE_BALDWIN=C09J96WA942  # Optional
 ```
 
 ### Fallback

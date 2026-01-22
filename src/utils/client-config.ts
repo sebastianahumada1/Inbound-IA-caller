@@ -109,6 +109,30 @@ export class ClientConfigManager {
         locationIdVar: 'RELIEFSOURCE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_RELIEFSOURCE',
       },
+      {
+        name: 'Belden Village',
+        assistantIdVar: 'BELDEN_VILLAGE_ASSISTANT_ID',
+        apiKeyVar: 'BELDEN_VILLAGE_GHL_API_KEY',
+        calendarIdVar: 'BELDEN_VILLAGE_CALENDAR_ID',
+        locationIdVar: 'BELDEN_VILLAGE_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_BELDEN_VILLAGE',
+      },
+      {
+        name: 'James Health Center',
+        assistantIdVar: 'JAMES_HEALTH_CENTER_ASSISTANT_ID',
+        apiKeyVar: 'JAMES_HEALTH_CENTER_GHL_API_KEY',
+        calendarIdVar: 'JAMES_HEALTH_CENTER_CALENDAR_ID',
+        locationIdVar: 'JAMES_HEALTH_CENTER_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_JAMES_HEALTH_CENTER',
+      },
+      {
+        name: 'Amplify Life Baldwin',
+        assistantIdVar: 'AMPLIFY_LIFE_BALDWIN_ASSISTANT_ID',
+        apiKeyVar: 'AMPLIFY_LIFE_BALDWIN_GHL_API_KEY',
+        calendarIdVar: 'AMPLIFY_LIFE_BALDWIN_CALENDAR_ID',
+        locationIdVar: 'AMPLIFY_LIFE_BALDWIN_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_BALDWIN',
+      },
     ];
 
     const missingConfigs: string[] = [];
