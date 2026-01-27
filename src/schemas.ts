@@ -202,7 +202,6 @@ export const UpdateStageArgsSchema = z.object({
 export const CheckCalendarAvailabilityArgsSchema = z.object({
   dateTime: z.string().min(1),
   durationMinutes: z.number().optional().default(30),
-  timezone: z.string().optional(), // e.g., "America/New_York", "America/Chicago", "America/Los_Angeles"
 });
 
 export const ScheduleAppointmentArgsSchema = z.object({
@@ -212,7 +211,6 @@ export const ScheduleAppointmentArgsSchema = z.object({
   startTime: z.string().min(1),
   endTime: z.string().min(1),
   notes: z.string().optional().default(''),
-  timezone: z.string().optional(), // e.g., "America/New_York", "America/Chicago", "America/Los_Angeles"
 });
 
 // Response schemas
