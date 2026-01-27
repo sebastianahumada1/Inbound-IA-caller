@@ -95,6 +95,130 @@ export class GHLConnector {
   }
 
   /**
+   * Extract time mentioned by user from transcript
+   * Looks for patterns like "9 AM", "3 PM", "2:30 PM", etc.
+   */
+  private extractTimeFromTranscript(transcript: string): { hour: number; minute: number; period: 'AM' | 'PM' | null } | null {
+    if (!transcript) return null;
+    
+    // Patterns to match:
+    // - "9 AM", "9am", "9:00 AM"
+    // - "3 PM", "3pm", "3:30 PM"
+    // - "2 o'clock", "2:00"
+    const patterns = [
+      /(\d{1,2})\s*(?:o'?clock|:00)?\s*(AM|PM|am|pm)/i,
+      /(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/i,
+      /(\d{1,2})\s*(AM|PM|am|pm)/i,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = transcript.match(pattern);
+      if (match && match[1]) {
+        const hour = parseInt(match[1], 10);
+        const minute = match[2] ? parseInt(match[2], 10) : 0;
+        const period = (match[3] || match[2])?.toUpperCase() as 'AM' | 'PM' | null;
+        
+        // Convert to 24-hour format
+        let hour24 = hour;
+        if (period === 'PM' && hour !== 12) {
+          hour24 = hour + 12;
+        } else if (period === 'AM' && hour === 12) {
+          hour24 = 0;
+        }
+        
+        Logger.info('[TRANSCRIPT_TIME] Extracted time from transcript', {
+          transcript: transcript.substring(0, 200),
+          extracted: { hour, minute, period, hour24 },
+        });
+        
+        return { hour: hour24, minute, period };
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Validate and correct appointment time using transcript if available
+   * Ensures the time matches what the user actually said
+   */
+  private async correctAppointmentTimeWithTranscript(
+    dateTimeString: string,
+    callId: string | undefined,
+    stateStorage: any
+  ): Promise<string> {
+    // If no callId, use regular correction
+    if (!callId || !stateStorage) {
+      return this.correctAppointmentTime(dateTimeString);
+    }
+    
+    try {
+      // Get transcript from storage
+      const transcript = await stateStorage.getTranscript(callId);
+      
+      if (transcript) {
+        // Extract time from transcript
+        const transcriptTime = this.extractTimeFromTranscript(transcript);
+        
+        if (transcriptTime) {
+          // Parse the datetime from AI
+          const aiDate = new Date(dateTimeString);
+          const aiHour = aiDate.getHours();
+          
+          // Compare with transcript time
+          if (aiHour !== transcriptTime.hour) {
+            Logger.warn('[TRANSCRIPT_VALIDATION] Time mismatch detected', {
+              transcriptTime: transcriptTime.hour,
+              aiTime: aiHour,
+              dateTimeString,
+            });
+            
+            // Correct the time to match transcript
+            const correctedDate = new Date(aiDate);
+            correctedDate.setHours(transcriptTime.hour, transcriptTime.minute, 0, 0);
+            
+            // Extract timezone from original
+            const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
+            const timezone = timezoneMatch ? timezoneMatch[1] : '-05:00';
+            
+            // Reconstruct datetime string
+            const year = correctedDate.getFullYear();
+            const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
+            const day = String(correctedDate.getDate()).padStart(2, '0');
+            const correctedHourStr = String(correctedDate.getHours()).padStart(2, '0');
+            const correctedMinStr = String(correctedDate.getMinutes()).padStart(2, '0');
+            const correctedSecStr = String(correctedDate.getSeconds()).padStart(2, '0');
+            
+            const corrected = `${year}-${month}-${day}T${correctedHourStr}:${correctedMinStr}:${correctedSecStr}${timezone}`;
+            
+            Logger.info('[TRANSCRIPT_VALIDATION] Corrected time based on transcript', {
+              original: dateTimeString,
+              corrected,
+              transcriptTime: transcriptTime.hour,
+              aiTime: aiHour,
+            });
+            
+            return corrected;
+          } else {
+            Logger.info('[TRANSCRIPT_VALIDATION] Time matches transcript', {
+              dateTimeString,
+              transcriptTime: transcriptTime.hour,
+              aiTime: aiHour,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      Logger.warn('[TRANSCRIPT_VALIDATION] Error using transcript, falling back to regular correction', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+    
+    // Fallback to regular correction
+    return this.correctAppointmentTime(dateTimeString);
+  }
+
+  /**
    * Validate and correct appointment time to ensure it matches user's requested time
    * Detects common AI timezone conversion errors and corrects them
    * Business hours: 8 AM - 7 PM (08:00 - 19:00)
@@ -726,7 +850,7 @@ export class GHLConnector {
     }
   }
 
-  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any): Promise<ToolResult> {
+  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, callId?: string, stateStorage?: any): Promise<ToolResult> {
     try {
       Logger.info('[CALENDAR] Processing schedule_appointment', { 
         id, 
@@ -832,8 +956,17 @@ export class GHLConnector {
       }
 
       // Correct common AI timezone conversion errors before validating
-      const correctedStartTime = this.correctAppointmentTime(args.startTime);
-      const correctedEndTime = this.correctAppointmentTime(args.endTime);
+      // Use transcript validation if available to ensure time matches what user said
+      const correctedStartTime = await this.correctAppointmentTimeWithTranscript(
+        args.startTime,
+        callId,
+        stateStorage
+      );
+      const correctedEndTime = await this.correctAppointmentTimeWithTranscript(
+        args.endTime,
+        callId,
+        stateStorage
+      );
       
       Logger.info('[CALENDAR] Time correction applied for validation', {
         id,

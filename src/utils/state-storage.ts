@@ -294,6 +294,66 @@ export class StateStorage {
   }
 
   /**
+   * Store call transcript (accumulates all transcript chunks)
+   */
+  async storeTranscript(callId: string, transcript: string, role?: 'user' | 'assistant'): Promise<void> {
+    await this.initStorage();
+    try {
+      const key = `${this.prefix}:transcript:${callId}`;
+      const existing = await this.storage.get(key);
+      const transcriptData = existing ? JSON.parse(existing) : { fullTranscript: '', chunks: [] };
+      
+      // Append to full transcript
+      transcriptData.fullTranscript += (transcriptData.fullTranscript ? ' ' : '') + transcript;
+      
+      // Store chunk with role if provided
+      if (role) {
+        transcriptData.chunks.push({ role, transcript, timestamp: Date.now() });
+      }
+      
+      await this.storage.set(key, JSON.stringify(transcriptData), { ex: this.ttl });
+      Logger.info('[STATE_STORAGE] Transcript stored', { 
+        callId, 
+        transcriptLength: transcriptData.fullTranscript.length,
+        chunks: transcriptData.chunks.length,
+        storage: this.isKvAvailable() ? 'KV' : 'memory',
+      });
+    } catch (error) {
+      Logger.error('[STATE_STORAGE] Failed to store transcript', {
+        callId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * Get call transcript
+   */
+  async getTranscript(callId: string): Promise<string | null> {
+    await this.initStorage();
+    try {
+      const key = `${this.prefix}:transcript:${callId}`;
+      const data: string | null = await this.storage.get(key);
+      if (!data) return null;
+      
+      const transcriptData = JSON.parse(data);
+      Logger.info('[STATE_STORAGE] Transcript retrieved', {
+        callId,
+        transcriptLength: transcriptData.fullTranscript?.length || 0,
+        chunks: transcriptData.chunks?.length || 0,
+        storage: this.isKvAvailable() ? 'KV' : 'memory',
+      });
+      return transcriptData.fullTranscript || null;
+    } catch (error) {
+      Logger.error('[STATE_STORAGE] Failed to get transcript', {
+        callId,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return null;
+    }
+  }
+
+  /**
    * Get storage status for health checks
    */
   getStatus(): { type: string; available: boolean; ttl: number } {
