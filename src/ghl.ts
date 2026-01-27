@@ -95,65 +95,95 @@ export class GHLConnector {
   }
 
   /**
-   * Correct common AI timezone conversion errors
-   * Detects when AI sends incorrect time (e.g., 9 PM instead of 3 PM)
-   * and corrects it before checking availability or scheduling
+   * Validate and correct appointment time to ensure it matches user's requested time
+   * Detects common AI timezone conversion errors and corrects them
+   * Business hours: 8 AM - 7 PM (08:00 - 19:00)
    */
   private correctAppointmentTime(dateTimeString: string): string {
     try {
       // Parse the datetime
       const date = new Date(dateTimeString);
       if (isNaN(date.getTime())) {
-        Logger.warn('[TIME_CORRECTION] Invalid date format, using as-is', { dateTimeString });
+        Logger.warn('[TIME_VALIDATION] Invalid date format, using as-is', { dateTimeString });
         return dateTimeString;
       }
 
       const hour = date.getHours();
+      const minutes = date.getMinutes();
       
-      // Business hours are typically 8 AM - 7 PM
-      // If hour is 8 PM (20:00) or later, it's likely a conversion error
-      // Common error: AI converts 3 PM (15:00) to 9 PM (21:00) - 6 hour difference
-      if (hour >= 20) {
-        Logger.warn('[TIME_CORRECTION] Detected suspiciously late hour, attempting correction', {
+      // Extract timezone from original string
+      const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
+      const timezone = timezoneMatch ? timezoneMatch[1] : '-05:00';
+      
+      // Business hours validation: 8 AM - 7 PM (08:00 - 19:00)
+      // If hour is outside business hours, it's likely a conversion error
+      const isOutsideBusinessHours = hour < 8 || hour >= 20;
+      
+      if (isOutsideBusinessHours) {
+        Logger.warn('[TIME_VALIDATION] Time outside business hours, attempting correction', {
           original: dateTimeString,
           hour,
+          minutes,
+          isBeforeBusinessHours: hour < 8,
+          isAfterBusinessHours: hour >= 20,
         });
         
-        // Try subtracting 6 hours (common conversion error)
-        const correctedDate = new Date(date.getTime() - 6 * 60 * 60 * 1000);
-        const correctedHour = correctedDate.getHours();
+        // Try multiple correction strategies
+        const correctionStrategies = [
+          { hours: -6, description: '6 hours (common CST/EST error)' },
+          { hours: -12, description: '12 hours (AM/PM confusion)' },
+          { hours: 6, description: '+6 hours (reverse error)' },
+          { hours: 12, description: '+12 hours (reverse AM/PM)' },
+        ];
         
-        // If corrected hour is in business hours (8 AM - 7 PM), use it
-        if (correctedHour >= 8 && correctedHour <= 19) {
-          // Extract timezone from original string
-          const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
-          const timezone = timezoneMatch ? timezoneMatch[1] : '-05:00';
+        for (const strategy of correctionStrategies) {
+          const correctedDate = new Date(date.getTime() + strategy.hours * 60 * 60 * 1000);
+          const correctedHour = correctedDate.getHours();
           
-          // Reconstruct datetime string with corrected time
-          const year = correctedDate.getFullYear();
-          const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
-          const day = String(correctedDate.getDate()).padStart(2, '0');
-          const correctedHourStr = String(correctedHour).padStart(2, '0');
-          const correctedMinStr = String(correctedDate.getMinutes()).padStart(2, '0');
-          const correctedSecStr = String(correctedDate.getSeconds()).padStart(2, '0');
-          
-          const corrected = `${year}-${month}-${day}T${correctedHourStr}:${correctedMinStr}:${correctedSecStr}${timezone}`;
-          
-          Logger.info('[TIME_CORRECTION] Corrected appointment time', {
-            original: dateTimeString,
-            corrected,
-            originalHour: hour,
-            correctedHour: correctedHour,
-          });
-          
-          return corrected;
+          // Check if corrected hour is in business hours
+          if (correctedHour >= 8 && correctedHour <= 19) {
+            // Reconstruct datetime string with corrected time
+            const year = correctedDate.getFullYear();
+            const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
+            const day = String(correctedDate.getDate()).padStart(2, '0');
+            const correctedHourStr = String(correctedHour).padStart(2, '0');
+            const correctedMinStr = String(correctedDate.getMinutes()).padStart(2, '0');
+            const correctedSecStr = String(correctedDate.getSeconds()).padStart(2, '0');
+            
+            const corrected = `${year}-${month}-${day}T${correctedHourStr}:${correctedMinStr}:${correctedSecStr}${timezone}`;
+            
+            Logger.info('[TIME_VALIDATION] Corrected appointment time', {
+              original: dateTimeString,
+              corrected,
+              originalHour: hour,
+              correctedHour: correctedHour,
+              strategy: strategy.description,
+              correctionHours: strategy.hours,
+            });
+            
+            return corrected;
+          }
         }
+        
+        // If no correction worked, log warning but return original
+        Logger.warn('[TIME_VALIDATION] Could not find valid correction, using original', {
+          original: dateTimeString,
+          hour,
+          minutes,
+        });
+      } else {
+        // Hour is in business hours, validate it's reasonable
+        Logger.debug('[TIME_VALIDATION] Time is within business hours', {
+          dateTimeString,
+          hour,
+          minutes,
+        });
       }
       
-      // If hour is already reasonable, return as-is
+      // Return original if already valid or if correction failed
       return dateTimeString;
     } catch (error) {
-      Logger.warn('[TIME_CORRECTION] Error correcting time, using as-is', {
+      Logger.warn('[TIME_VALIDATION] Error validating time, using as-is', {
         dateTimeString,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
