@@ -275,7 +275,7 @@ export class VapiWebhookHandler {
           return await this.handleUpdateStage(id, args);
         
         case 'check_calendar_availability':
-          return await this.handleCheckCalendarAvailability(id, args);
+          return await this.handleCheckCalendarAvailability(id, args, callId);
         
         case 'schedule_appointment':
           return await this.handleScheduleAppointment(id, args, ghlMetadata, callId);
@@ -384,10 +384,10 @@ export class VapiWebhookHandler {
     }
   }
 
-  private async handleCheckCalendarAvailability(id: string, args: any): Promise<ToolResult> {
+  private async handleCheckCalendarAvailability(id: string, args: any, callId?: string): Promise<ToolResult> {
     try {
       const validatedArgs = CheckCalendarAvailabilityArgsSchema.parse(args);
-      return await this.ghlConnector.checkCalendarAvailability(id, validatedArgs);
+      return await this.ghlConnector.checkCalendarAvailability(id, validatedArgs, callId, this.stateStorage);
     } catch (error) {
       if (error instanceof ZodError) {
         Logger.error('Invalid check_calendar_availability arguments', { id, errors: error.issues });

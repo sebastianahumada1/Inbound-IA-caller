@@ -163,25 +163,48 @@ export class GHLConnector {
         if (transcriptTime) {
           // Parse the datetime from AI
           const aiDate = new Date(dateTimeString);
-          const aiHour = aiDate.getHours();
+          const isUTC = dateTimeString.endsWith('Z');
+          
+          // Get timezone from original or use client's default
+          let timezone = '-05:00'; // Default to EST
+          const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
+          if (timezoneMatch && timezoneMatch[1]) {
+            timezone = timezoneMatch[1];
+          } else if (this.assistantId) {
+            // Try to get timezone from client config (if we add it later)
+            // For now, use default based on common timezones
+            const clientName = ClientConfigManager.getClientName(this.assistantId);
+            if (clientName.includes('Texas') || clientName.includes('West Texas')) {
+              timezone = '-06:00'; // Central Time
+            }
+          }
+          
+          // If AI sent UTC, we need to check if it matches transcript when converted to local time
+          let aiHourLocal = aiDate.getHours();
+          if (isUTC) {
+            // Convert UTC to local timezone for comparison
+            // Parse the date as if it were in the client's timezone
+            const localDateStr = dateTimeString.replace('Z', timezone);
+            const localDate = new Date(localDateStr);
+            aiHourLocal = localDate.getHours();
+          }
           
           // Compare with transcript time
-          if (aiHour !== transcriptTime.hour) {
+          if (aiHourLocal !== transcriptTime.hour) {
             Logger.warn('[TRANSCRIPT_VALIDATION] Time mismatch detected', {
               transcriptTime: transcriptTime.hour,
-              aiTime: aiHour,
+              aiTimeUTC: isUTC ? aiDate.getHours() : undefined,
+              aiTimeLocal: aiHourLocal,
               dateTimeString,
+              isUTC,
             });
             
             // Correct the time to match transcript
+            // Use the date from AI but set the hour/minute from transcript
             const correctedDate = new Date(aiDate);
             correctedDate.setHours(transcriptTime.hour, transcriptTime.minute, 0, 0);
             
-            // Extract timezone from original
-            const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
-            const timezone = timezoneMatch ? timezoneMatch[1] : '-05:00';
-            
-            // Reconstruct datetime string
+            // Reconstruct datetime string with client's timezone
             const year = correctedDate.getFullYear();
             const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
             const day = String(correctedDate.getDate()).padStart(2, '0');
@@ -195,15 +218,35 @@ export class GHLConnector {
               original: dateTimeString,
               corrected,
               transcriptTime: transcriptTime.hour,
-              aiTime: aiHour,
+              aiTimeLocal: aiHourLocal,
+              timezone,
             });
             
             return corrected;
           } else {
+            // Time matches, but if it was in UTC, convert to client timezone
+            if (isUTC) {
+              const year = aiDate.getFullYear();
+              const month = String(aiDate.getMonth() + 1).padStart(2, '0');
+              const day = String(aiDate.getDate()).padStart(2, '0');
+              const hourStr = String(transcriptTime.hour).padStart(2, '0');
+              const minStr = String(transcriptTime.minute).padStart(2, '0');
+              
+              const converted = `${year}-${month}-${day}T${hourStr}:${minStr}:00${timezone}`;
+              
+              Logger.info('[TRANSCRIPT_VALIDATION] Converted UTC to client timezone', {
+                original: dateTimeString,
+                converted,
+                timezone,
+              });
+              
+              return converted;
+            }
+            
             Logger.info('[TRANSCRIPT_VALIDATION] Time matches transcript', {
               dateTimeString,
               transcriptTime: transcriptTime.hour,
-              aiTime: aiHour,
+              aiTimeLocal: aiHourLocal,
             });
           }
         }
@@ -667,7 +710,7 @@ export class GHLConnector {
     }
   }
 
-  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs): Promise<ToolResult> {
+  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, callId?: string, stateStorage?: any): Promise<ToolResult> {
     try {
       Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args });
 
@@ -694,7 +737,12 @@ export class GHLConnector {
       }
 
       // Correct common AI timezone conversion errors before checking
-      const correctedDateTime = this.correctAppointmentTime(args.dateTime);
+      // Use transcript validation if available to ensure time matches what user said
+      const correctedDateTime = await this.correctAppointmentTimeWithTranscript(
+        args.dateTime,
+        callId,
+        stateStorage
+      );
       
       Logger.info('[CALENDAR] DateTime correction applied', {
         id,
