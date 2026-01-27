@@ -73,6 +73,90 @@ export class GHLConnector {
   }
 
   /**
+   * Get timezone offset string for a given IANA timezone name
+   * Calculates the correct offset considering DST
+   */
+  private getTimezoneOffset(timezone: string, date: Date = new Date()): string {
+    try {
+      // Use Intl to get the timezone offset
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        timeZoneName: 'shortOffset',
+      });
+      
+      const parts = formatter.formatToParts(date);
+      const tzPart = parts.find(p => p.type === 'timeZoneName');
+      
+      if (tzPart && tzPart.value) {
+        // tzPart.value is like "GMT-5" or "GMT-4" or "GMT+5:30"
+        const match = tzPart.value.match(/GMT([+-])(\d{1,2})(?::(\d{2}))?/);
+        if (match && match[1] && match[2]) {
+          const sign = match[1];
+          const hours = match[2].padStart(2, '0');
+          const minutes = match[3] || '00';
+          return `${sign}${hours}:${minutes}`;
+        }
+      }
+      
+      // Fallback: calculate offset manually
+      const utcDate = new Date(date.toLocaleString('en-US', { timeZone: 'UTC' }));
+      const tzDate = new Date(date.toLocaleString('en-US', { timeZone: timezone }));
+      const diffMs = tzDate.getTime() - utcDate.getTime();
+      const diffHours = Math.floor(Math.abs(diffMs) / 3600000);
+      const diffMinutes = Math.floor((Math.abs(diffMs) % 3600000) / 60000);
+      const sign = diffMs >= 0 ? '+' : '-';
+      
+      return `${sign}${String(diffHours).padStart(2, '0')}:${String(diffMinutes).padStart(2, '0')}`;
+    } catch (error) {
+      Logger.warn('[TIMEZONE] Error calculating timezone offset, defaulting to EST', {
+        timezone,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return '-05:00'; // Default to EST
+    }
+  }
+
+  /**
+   * Parse a datetime string and apply the correct timezone
+   * If the datetime string has no timezone, treat it as local time in the specified timezone
+   */
+  private parseDateTimeWithTimezone(dateTimeString: string, timezone: string = 'America/New_York'): { date: Date; isoString: string } {
+    // Check if datetime already has timezone info
+    const hasTimezone = /[+-]\d{2}:\d{2}$/.test(dateTimeString) || dateTimeString.endsWith('Z');
+    
+    if (hasTimezone) {
+      // Already has timezone, parse directly
+      const date = new Date(dateTimeString);
+      return {
+        date,
+        isoString: dateTimeString,
+      };
+    }
+    
+    // No timezone specified - treat as local time in the specified timezone
+    // Get the offset for this timezone at the specified date
+    const tempDate = new Date(dateTimeString + 'Z'); // Parse as UTC temporarily to get approximate date
+    const offset = this.getTimezoneOffset(timezone, tempDate);
+    
+    // Append the offset to the datetime string
+    const isoStringWithTimezone = dateTimeString + offset;
+    const date = new Date(isoStringWithTimezone);
+    
+    Logger.info('[TIMEZONE] Parsed datetime with timezone', {
+      original: dateTimeString,
+      timezone,
+      offset,
+      result: isoStringWithTimezone,
+      dateObject: date.toISOString(),
+    });
+    
+    return {
+      date,
+      isoString: isoStringWithTimezone,
+    };
+  }
+
+  /**
    * Get the Calendar ID based on Assistant ID
    */
   private getCalendarId(): string | null {
@@ -472,11 +556,22 @@ export class GHLConnector {
         };
       }
 
-      // Parse the requested dateTime
-      const requestedDate = new Date(args.dateTime);
+      // Parse the requested dateTime with timezone support
+      // If timezone is provided, use it; otherwise default to America/New_York (EST)
+      const timezone = args.timezone || 'America/New_York';
+      const { date: requestedDate, isoString: requestedDateISO } = this.parseDateTimeWithTimezone(args.dateTime, timezone);
+      
+      Logger.info('[CALENDAR] Parsed datetime with timezone', {
+        id,
+        originalDateTime: args.dateTime,
+        timezone,
+        parsedDate: requestedDate.toISOString(),
+        isoStringWithTimezone: requestedDateISO,
+      });
+
       if (isNaN(requestedDate.getTime())) {
         const error = 'Invalid dateTime format';
-        Logger.error('[CALENDAR] ' + error, { id, dateTime: args.dateTime });
+        Logger.error('[CALENDAR] ' + error, { id, dateTime: args.dateTime, timezone });
         return {
           id,
           ok: false,
@@ -876,14 +971,16 @@ export class GHLConnector {
       const apiUrl = `https://services.leadconnectorhq.com/calendars/events/appointments`;
       
       // GHL expects selectedSlot as ISO string with timezone
-      // Convert startTime to ISO string with timezone (EST)
-      // If startTime is already in correct format, use it; otherwise convert
-      let selectedSlot = args.startTime;
-      if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00')) {
-        // If no timezone, assume EST and add it
-        const date = new Date(args.startTime);
-        selectedSlot = date.toISOString().replace('Z', '-05:00');
-      }
+      // Use the timezone from args if provided, otherwise default to America/New_York
+      const timezone = args.timezone || 'America/New_York';
+      const { isoString: selectedSlot } = this.parseDateTimeWithTimezone(args.startTime, timezone);
+      
+      Logger.info('[CALENDAR] Parsed startTime with timezone', {
+        id,
+        originalStartTime: args.startTime,
+        timezone,
+        selectedSlot,
+      });
 
       // Normalize phone number - GHL requires E.164 format (with + and country code)
       let normalizedPhone = contactPhone;
@@ -1038,7 +1135,7 @@ export class GHLConnector {
         calendarId,
         contactId: contactIdToUse,
         selectedSlot,
-        selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
+        selectedTimezone: timezone, // Use timezone from args or default to America/New_York
         notes: args.notes || '',
       };
       
