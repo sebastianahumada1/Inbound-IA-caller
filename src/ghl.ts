@@ -94,6 +94,73 @@ export class GHLConnector {
     return null;
   }
 
+  /**
+   * Correct common AI timezone conversion errors
+   * Detects when AI sends incorrect time (e.g., 9 PM instead of 3 PM)
+   * and corrects it before checking availability or scheduling
+   */
+  private correctAppointmentTime(dateTimeString: string): string {
+    try {
+      // Parse the datetime
+      const date = new Date(dateTimeString);
+      if (isNaN(date.getTime())) {
+        Logger.warn('[TIME_CORRECTION] Invalid date format, using as-is', { dateTimeString });
+        return dateTimeString;
+      }
+
+      const hour = date.getHours();
+      
+      // Business hours are typically 8 AM - 7 PM
+      // If hour is 8 PM (20:00) or later, it's likely a conversion error
+      // Common error: AI converts 3 PM (15:00) to 9 PM (21:00) - 6 hour difference
+      if (hour >= 20) {
+        Logger.warn('[TIME_CORRECTION] Detected suspiciously late hour, attempting correction', {
+          original: dateTimeString,
+          hour,
+        });
+        
+        // Try subtracting 6 hours (common conversion error)
+        const correctedDate = new Date(date.getTime() - 6 * 60 * 60 * 1000);
+        const correctedHour = correctedDate.getHours();
+        
+        // If corrected hour is in business hours (8 AM - 7 PM), use it
+        if (correctedHour >= 8 && correctedHour <= 19) {
+          // Extract timezone from original string
+          const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
+          const timezone = timezoneMatch ? timezoneMatch[1] : '-05:00';
+          
+          // Reconstruct datetime string with corrected time
+          const year = correctedDate.getFullYear();
+          const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
+          const day = String(correctedDate.getDate()).padStart(2, '0');
+          const correctedHourStr = String(correctedHour).padStart(2, '0');
+          const correctedMinStr = String(correctedDate.getMinutes()).padStart(2, '0');
+          const correctedSecStr = String(correctedDate.getSeconds()).padStart(2, '0');
+          
+          const corrected = `${year}-${month}-${day}T${correctedHourStr}:${correctedMinStr}:${correctedSecStr}${timezone}`;
+          
+          Logger.info('[TIME_CORRECTION] Corrected appointment time', {
+            original: dateTimeString,
+            corrected,
+            originalHour: hour,
+            correctedHour: correctedHour,
+          });
+          
+          return corrected;
+        }
+      }
+      
+      // If hour is already reasonable, return as-is
+      return dateTimeString;
+    } catch (error) {
+      Logger.warn('[TIME_CORRECTION] Error correcting time, using as-is', {
+        dateTimeString,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return dateTimeString;
+    }
+  }
+
   async sendSms(id: string, args: SendSmsArgs): Promise<ToolResult> {
     try {
       Logger.info('Processing send_sms tool call', { id, args });
@@ -472,11 +539,21 @@ export class GHLConnector {
         };
       }
 
-      // Parse the requested dateTime
-      const requestedDate = new Date(args.dateTime);
+      // Correct common AI timezone conversion errors before checking
+      const correctedDateTime = this.correctAppointmentTime(args.dateTime);
+      
+      Logger.info('[CALENDAR] DateTime correction applied', {
+        id,
+        original: args.dateTime,
+        corrected: correctedDateTime,
+        wasCorrected: args.dateTime !== correctedDateTime,
+      });
+      
+      // Parse the requested dateTime (using corrected version)
+      const requestedDate = new Date(correctedDateTime);
       if (isNaN(requestedDate.getTime())) {
         const error = 'Invalid dateTime format';
-        Logger.error('[CALENDAR] ' + error, { id, dateTime: args.dateTime });
+        Logger.error('[CALENDAR] ' + error, { id, dateTime: correctedDateTime });
         return {
           id,
           ok: false,
@@ -724,13 +801,27 @@ export class GHLConnector {
         }
       }
 
-      // Validate date formats
-      const startTime = new Date(args.startTime);
-      const endTime = new Date(args.endTime);
+      // Correct common AI timezone conversion errors before validating
+      const correctedStartTime = this.correctAppointmentTime(args.startTime);
+      const correctedEndTime = this.correctAppointmentTime(args.endTime);
+      
+      Logger.info('[CALENDAR] Time correction applied for validation', {
+        id,
+        originalStartTime: args.startTime,
+        correctedStartTime,
+        originalEndTime: args.endTime,
+        correctedEndTime,
+        startTimeWasCorrected: args.startTime !== correctedStartTime,
+        endTimeWasCorrected: args.endTime !== correctedEndTime,
+      });
+      
+      // Validate date formats (using corrected times)
+      const startTime = new Date(correctedStartTime);
+      const endTime = new Date(correctedEndTime);
 
       if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
         const error = 'Invalid date format for startTime or endTime';
-        Logger.error('[CALENDAR] ' + error, { id, args });
+        Logger.error('[CALENDAR] ' + error, { id, startTime: correctedStartTime, endTime: correctedEndTime });
         return {
           id,
           ok: false,
@@ -876,12 +967,12 @@ export class GHLConnector {
       const apiUrl = `https://services.leadconnectorhq.com/calendars/events/appointments`;
       
       // GHL expects selectedSlot as ISO string with timezone
-      // Convert startTime to ISO string with timezone (EST)
+      // Use correctedStartTime (already corrected above)
       // If startTime is already in correct format, use it; otherwise convert
-      let selectedSlot = args.startTime;
-      if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00')) {
+      let selectedSlot = correctedStartTime;
+      if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00') && !selectedSlot.includes('-06:00')) {
         // If no timezone, assume EST and add it
-        const date = new Date(args.startTime);
+        const date = new Date(correctedStartTime);
         selectedSlot = date.toISOString().replace('Z', '-05:00');
       }
 
