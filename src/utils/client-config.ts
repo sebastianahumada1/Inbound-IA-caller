@@ -54,7 +54,7 @@ export class ClientConfigManager {
         slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS_BACK_NECK',
       },
       {
-        name: 'Third Client',
+        name: 'Jennings',
         assistantIdVar: 'THIRD_CLIENT_ASSISTANT_ID',
         apiKeyVar: 'THIRD_CLIENT_GHL_API_KEY',
         calendarIdVar: 'THIRD_CLIENT_CALENDAR_ID',

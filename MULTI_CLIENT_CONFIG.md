@@ -25,7 +25,7 @@ The system supports 11 clients, each configured via environment variables:
   - `WEST_TEXAS_GHL_API_KEY`
   - `SLACK_CHANNEL_ID_WEST_TEXAS` (optional)
 
-### 3. Third Client
+### 3. Jennings
 - **Environment Variables**:
   - `THIRD_CLIENT_ASSISTANT_ID`
   - `THIRD_CLIENT_GHL_API_KEY`
@@ -192,7 +192,7 @@ WEST_TEXAS_GHL_API_KEY=pit-71098f8f-4b2d-46fb-a5a6-c55cca460ecb
 SLACK_CHANNEL_ID_WEST_TEXAS=C09J96WA942  # Optional
 ```
 
-**Third Client:**
+**Jennings:**
 ```env
 THIRD_CLIENT_ASSISTANT_ID=39ba1969-84bf-4991-ab9e-9b234178f5c2
 THIRD_CLIENT_GHL_API_KEY=pit-38da7913-a22e-46b4-873e-f4bb24de234b
