@@ -133,6 +133,14 @@ export class ClientConfigManager {
         locationIdVar: 'AMPLIFY_LIFE_BALDWIN_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_BALDWIN',
       },
+      {
+        name: 'Miami Valley',
+        assistantIdVar: 'MIAMI_VALLEY_ASSISTANT_ID',
+        apiKeyVar: 'MIAMI_VALLEY_GHL_API_KEY',
+        calendarIdVar: 'MIAMI_VALLEY_CALENDAR_ID',
+        locationIdVar: 'MIAMI_VALLEY_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY',
+      },
     ];
 
     const missingConfigs: string[] = [];

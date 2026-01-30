@@ -11,7 +11,7 @@ The system now supports multiple clients, each with their own:
 
 ## Configured Clients
 
-The system supports 10 clients, each configured via environment variables:
+The system supports 11 clients, each configured via environment variables:
 
 ### 1. Premier Wellness
 - **Environment Variables**:
@@ -80,6 +80,14 @@ The system supports 10 clients, each configured via environment variables:
   - `AMPLIFY_LIFE_BALDWIN_CALENDAR_ID`
   - `AMPLIFY_LIFE_BALDWIN_LOCATION_ID`
   - `SLACK_CHANNEL_ID_AMPLIFY_LIFE_BALDWIN` (optional)
+
+### 11. Miami Valley
+- **Environment Variables**:
+  - `MIAMI_VALLEY_ASSISTANT_ID`
+  - `MIAMI_VALLEY_GHL_API_KEY`
+  - `MIAMI_VALLEY_CALENDAR_ID`
+  - `MIAMI_VALLEY_LOCATION_ID`
+  - `SLACK_CHANNEL_ID_MIAMI_VALLEY` (optional)
 
 ## How It Works
 
@@ -246,6 +254,15 @@ AMPLIFY_LIFE_BALDWIN_GHL_API_KEY=pit-9150ff4f-898b-4a86-a675-fb10a446b3ab
 AMPLIFY_LIFE_BALDWIN_CALENDAR_ID=xYizWvqrBzFQ4WvxjhXk
 AMPLIFY_LIFE_BALDWIN_LOCATION_ID=nJiRZxRlrhZI9BxTJY4w
 SLACK_CHANNEL_ID_AMPLIFY_LIFE_BALDWIN=C09J96WA942  # Optional
+```
+
+**Miami Valley:**
+```env
+MIAMI_VALLEY_ASSISTANT_ID=b998b1e4-a06d-4fb0-ae0e-bdb0910ba22c
+MIAMI_VALLEY_GHL_API_KEY=pit-7d4188fe-906f-4616-8949-f4ef60bc4962
+MIAMI_VALLEY_CALENDAR_ID=asB9EWkihikduMeALPCw
+MIAMI_VALLEY_LOCATION_ID=pgRPQyk6lCWesvMvPGuU
+SLACK_CHANNEL_ID_MIAMI_VALLEY=C09J96WA942  # Optional
 ```
 
 ### Fallback
