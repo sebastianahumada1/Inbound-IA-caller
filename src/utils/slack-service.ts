@@ -178,10 +178,21 @@ export class SlackService {
         || fullCallData?.metadata?.email 
         || 'N/A';
       
+      // Extract phone from multiple sources
+      const leadPhone = fullCallData?.variables?.phone
+        || fullCallData?.variableValues?.phone
+        || fullCallData?.assistantOverrides?.variableValues?.phone
+        || ghlMetadata?.contact?.phone
+        || ghlMetadata?.contact?.phoneNumber
+        || fullCallData?.metadata?.phone
+        || fullCallData?.customer?.number
+        || 'N/A';
+      
       Logger.info('[SLACK_SERVICE] DEBUG - Extracted lead info', {
         callId,
         leadName,
         leadEmail,
+        leadPhone,
         nameSource: fullCallData?.variables?.name ? 'fullCallData.variables.name' :
                     fullCallData?.variableValues?.name ? 'fullCallData.variableValues.name' :
                     fullCallData?.assistantOverrides?.variableValues?.name ? 'fullCallData.assistantOverrides.variableValues.name' :
@@ -207,28 +218,17 @@ export class SlackService {
       
       // Build the message with exact format requested
       let message = `<!channel> New Call Recording & Report Just Dropped\n\n`;
-      message += `**The name of the GHL account associated with the call:** ${clientName}\n\n`;
-      message += `**Lead Name:** ${leadName}\n`;
-      message += `**Email:** ${leadEmail}\n`;
-      message += `**Date:** ${formattedDate}\n\n`;
-      message += `**Call ID:** ${callId}\n\n`;
-      message += `**Call Details:**\n`;
-      
-      if (context?.cost) {
-        message += `**Cost:** $${context.cost.toFixed(4)}\n`;
-      }
-      
-      if (context?.duration) {
-        const durationMinutes = Math.floor(context.duration / 60);
-        const durationSeconds = Math.floor(context.duration % 60);
-        message += `**Duration:** ${durationMinutes}:${durationSeconds.toString().padStart(2, '0')}\n`;
-      }
+      message += `*Practice Name:* ${clientName}\n`;
+      message += `*Lead Name:* ${leadName}\n`;
+      message += `*Email:* ${leadEmail}\n`;
+      message += `*Phone:* ${leadPhone}\n`;
       
       if (context?.summary) {
-        message += `**Summary:** ${context.summary}\n`;
+        message += `*Summary:* ${context.summary}\n`;
       }
       
-      message += `\n**Call recording:** ${recordingUrl}`;
+      message += `*Date:* ${formattedDate}\n`;
+      message += `*Call recording:* ${recordingUrl}`;
 
       // Send the message
       await this.sendMessage({
