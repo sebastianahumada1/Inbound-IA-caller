@@ -245,6 +245,34 @@ export class ClientConfigManager {
       }
     }
 
+    // Register Inbound Default assistant as alias of Premier Wellness
+    const inboundDefaultAssistantId = process.env['VAPI_ASSISTANT_DEFAULT_ID'];
+    if (inboundDefaultAssistantId && premierWellnessAssistantId) {
+      const premierConfig = this.configs.get(premierWellnessAssistantId);
+      if (premierConfig && !this.configs.has(inboundDefaultAssistantId)) {
+        const inboundConfig: ClientConfig = {
+          name: 'Premier Inbound Neuro',
+          assistantId: inboundDefaultAssistantId,
+          ghlApiKey: premierConfig.ghlApiKey,
+        };
+        if (premierConfig.calendarId) inboundConfig.calendarId = premierConfig.calendarId;
+        if (premierConfig.locationId) inboundConfig.locationId = premierConfig.locationId;
+        if (premierConfig.slackChannelId) inboundConfig.slackChannelId = premierConfig.slackChannelId;
+
+        this.configs.set(inboundDefaultAssistantId, inboundConfig);
+        configuredClients.push('Premier Inbound Neuro (alias)');
+
+        Logger.info('[CLIENT_CONFIG] Registered alias: Premier Inbound Neuro -> Premier Wellness', {
+          aliasAssistantId: inboundDefaultAssistantId.substring(0, 8) + '...',
+          parentAssistantId: premierWellnessAssistantId.substring(0, 8) + '...',
+          hasGhlApiKey: !!inboundConfig.ghlApiKey,
+          hasCalendarId: !!inboundConfig.calendarId,
+          hasLocationId: !!inboundConfig.locationId,
+          hasSlackChannelId: !!inboundConfig.slackChannelId,
+        });
+      }
+    }
+
     // Log initialization summary
     if (this.configs.size === 0) {
       Logger.error('[CLIENT_CONFIG] No client configurations loaded! Check environment variables.', {
