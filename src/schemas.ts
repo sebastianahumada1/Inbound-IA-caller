@@ -227,6 +227,10 @@ export const ScheduleAppointmentArgsSchema = z.object({
   notes: z.string().optional().default(''),
 });
 
+export const LookupCallerArgsSchema = z.object({
+  phone: z.string().min(1),
+});
+
 // Response schemas
 export const ToolResultSchema = z.object({
   id: z.string(),
@@ -251,6 +255,7 @@ export type AddNoteArgs = z.infer<typeof AddNoteArgsSchema>;
 export type UpdateStageArgs = z.infer<typeof UpdateStageArgsSchema>;
 export type CheckCalendarAvailabilityArgs = z.infer<typeof CheckCalendarAvailabilityArgsSchema>;
 export type ScheduleAppointmentArgs = z.infer<typeof ScheduleAppointmentArgsSchema>;
+export type LookupCallerArgs = z.infer<typeof LookupCallerArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;
 

@@ -16,9 +16,12 @@ import {
   UpdateStageArgsSchema,
   CheckCalendarAvailabilityArgsSchema,
   ScheduleAppointmentArgsSchema,
+  LookupCallerArgsSchema,
   ToolResult,
   WebhookResponse,
 } from './schemas.js';
+import { hotProspectorSearchByPhone } from './lib/hotProspector.js';
+import type { HotProspectorLead } from './lib/hotProspector.js';
 
 export class VapiWebhookHandler {
   private ghlConnector: GHLConnector;
@@ -289,6 +292,9 @@ export class VapiWebhookHandler {
         
         case 'schedule_appointment':
           return await this.handleScheduleAppointment(id, args, ghlMetadata, callId);
+
+        case 'lookup_caller':
+          return await this.handleLookupCaller(id, args, callId);
         
         default:
           Logger.warn('Unknown tool name', { id, name });
@@ -426,6 +432,133 @@ export class VapiWebhookHandler {
       }
       throw error;
     }
+  }
+
+  // ── HotProspector Lookup Tool ──────────────────────────────────────
+  private async handleLookupCaller(id: string, args: any, callId?: string): Promise<ToolResult> {
+    try {
+      const validatedArgs = LookupCallerArgsSchema.parse(args);
+      const phone = validatedArgs.phone;
+
+      Logger.info('[LOOKUP_CALLER] Looking up caller in HotProspector', {
+        toolCallId: id,
+        callId,
+        phone,
+      });
+
+      const hpResult = await hotProspectorSearchByPhone(phone);
+
+      if (!hpResult.ok || hpResult.count === 0 || !hpResult.lead) {
+        Logger.info('[LOOKUP_CALLER] No lead found', { callId, phone });
+        return {
+          id,
+          ok: true,
+          data: {
+            found: false,
+            callerType: 'unknown',
+            phone,
+            message: 'No record found for this phone number.',
+          },
+        };
+      }
+
+      const lead: HotProspectorLead = hpResult.lead;
+      const fullName = `${lead.Firstname ?? ''} ${lead.Lastname ?? ''}`.trim();
+      const mobile = lead.Mobile ?? lead.Phone ?? '';
+      const cc = lead.CountryCode ?? '+1';
+      const fullPhone = mobile.startsWith('+') ? mobile : `${cc}${mobile}`;
+      const cf = lead.Lead_Custom_Fields;
+
+      // Build a flat data object the agent can consume directly
+      const leadData: Record<string, unknown> = {
+        found: true,
+        callerType: 'known',
+
+        // Core contact info
+        leadId: lead.LeadId ?? '',
+        firstName: lead.Firstname ?? '',
+        lastName: lead.Lastname ?? '',
+        fullName,
+        email: lead['E-Mail'] ?? '',
+        phone: fullPhone,
+        mobile: lead.Mobile ?? '',
+        countryCode: lead.CountryCode ?? '',
+
+        // Location / Group
+        locationId: lead.LocationId ?? '',
+        groupId: lead.GroupId ?? '',
+        tags: lead.Tags ?? '',
+
+        // Address
+        city: lead.City ?? '',
+        state: lead.State ?? '',
+        zipcode: lead.Zipcode ?? '',
+        address: lead.Address ?? '',
+        company: lead.Company ?? '',
+      };
+
+      // Custom fields (appointment, medical, etc.)
+      if (cf) {
+        leadData.appointmentDate = cf.appointment_date ?? '';
+        leadData.appointmentTime = cf.appointment_time ?? '';
+        leadData.callCount = cf.call_count ?? '';
+        leadData.painLocation = this.stringifyField(cf.where_is_your_pain_located);
+        leadData.hasMri = cf.have_you_had_an_mri ?? '';
+        leadData.reasonableCommute =
+          cf.is__custom_valuescity__a_reasonable_commute_for_you ?? '';
+        leadData.doctorVisit = this.stringifyField(
+          cf.have_you_seen_a_doctor_for_your_pain_if_so_what_did_they_tell_you_,
+        );
+        leadData.triedTreatments = this.stringifyField(
+          cf.have_you_tried_procedures_or_treatments_for_your_pain,
+        );
+        leadData.symptoms = this.stringifyField(
+          cf.describe_your_symptoms_check_all_that_apply,
+        );
+        leadData.takingMedications =
+          cf.are_you_currently_taking_medications_for_your_pain ?? '';
+        leadData.painDuration =
+          cf.how_long_have_you_been_suffering_from_back_pain_disc_pain_or_sciatica ?? '';
+        leadData.sopLink = cf.back__neck_sop_link ?? '';
+      }
+
+      Logger.info('[LOOKUP_CALLER] Lead found, returning data to agent', {
+        callId,
+        leadId: lead.LeadId,
+        firstName: lead.Firstname,
+        fieldCount: Object.keys(leadData).length,
+      });
+
+      return {
+        id,
+        ok: true,
+        data: leadData,
+      };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        Logger.error('[LOOKUP_CALLER] Invalid arguments', { id, errors: error.issues });
+        return {
+          id,
+          ok: false,
+          error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+        };
+      }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[LOOKUP_CALLER] Error during lookup', { id, callId, error: errorMessage });
+      return {
+        id,
+        ok: false,
+        error: `Lookup failed: ${errorMessage}`,
+      };
+    }
+  }
+
+  /** Safely convert a value that might be a string or array to a readable string. */
+  private stringifyField(value: unknown): string {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value.join(', ');
+    return String(value);
   }
 
   private handleCallEnded(message: any): WebhookResponse {
