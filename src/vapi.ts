@@ -197,6 +197,16 @@ export class VapiWebhookHandler {
       
       case 'ghl_tool':
         return await this.handleGhlTool(message);
+
+      case 'assistant.started':
+        Logger.info('[WEBHOOK] Assistant started', {
+          callId: (message as any).call?.id,
+          assistantName: (message as any).newAssistant?.name || (message as any).assistant?.name,
+        });
+        return {
+          ok: true,
+          message: 'Assistant started acknowledged',
+        };
       
       default:
         Logger.warn('Unknown message type', { type: (message as any).type });

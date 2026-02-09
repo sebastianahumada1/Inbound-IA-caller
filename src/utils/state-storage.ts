@@ -9,6 +9,18 @@
 
 import { Logger } from './logger.js';
 
+/**
+ * Safely parse a value that might already be an object (Vercel KV auto-deserializes)
+ * or might be a JSON string (in-memory storage stores raw strings).
+ */
+function safeParse<T = any>(value: any): T {
+  if (typeof value === 'string') {
+    return JSON.parse(value);
+  }
+  // Already an object (Vercel KV auto-parsed it)
+  return value as T;
+}
+
 // Try to import Vercel KV at runtime
 let kvStorage: any = null;
 let kvInitPromise: Promise<void> | null = null;
@@ -220,7 +232,7 @@ export class StateStorage {
         found: !!data,
         storage: this.isKvAvailable() ? 'KV' : 'memory',
       });
-      return data ? JSON.parse(data) : null;
+      return data ? safeParse(data) : null;
     } catch (error) {
       Logger.error('[STATE_STORAGE] Failed to get tool call data', {
         callId,
@@ -259,7 +271,7 @@ export class StateStorage {
     try {
       const key = `${this.prefix}:metadata:${callId}`;
       const data: string | null = await this.storage.get(key);
-      return data ? JSON.parse(data) : null;
+      return data ? safeParse(data) : null;
     } catch (error) {
       Logger.error('[STATE_STORAGE] Failed to get metadata', {
         callId,
@@ -301,7 +313,7 @@ export class StateStorage {
     try {
       const key = `${this.prefix}:transcript:${callId}`;
       const existing = await this.storage.get(key);
-      const transcriptData = existing ? JSON.parse(existing) : { fullTranscript: '', chunks: [] };
+      const transcriptData = existing ? safeParse(existing) : { fullTranscript: '', chunks: [] };
       
       // Append to full transcript
       transcriptData.fullTranscript += (transcriptData.fullTranscript ? ' ' : '') + transcript;
@@ -336,7 +348,7 @@ export class StateStorage {
       const data: string | null = await this.storage.get(key);
       if (!data) return null;
       
-      const transcriptData = JSON.parse(data);
+      const transcriptData = safeParse(data);
       Logger.info('[STATE_STORAGE] Transcript retrieved', {
         callId,
         transcriptLength: transcriptData.fullTranscript?.length || 0,

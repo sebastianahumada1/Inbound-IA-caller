@@ -135,6 +135,19 @@ export const VapiGhlToolMessageSchema = z.object({
   metadata: z.record(z.any()).optional(),
 });
 
+export const VapiAssistantStartedMessageSchema = z.object({
+  type: z.literal('assistant.started'),
+  call: z.object({
+    id: z.string(),
+  }).passthrough().optional(),
+  timestamp: z.number().optional(),
+  newAssistant: z.record(z.any()).optional(),
+  artifact: z.record(z.any()).optional(),
+  phoneNumber: z.record(z.any()).optional(),
+  customer: z.record(z.any()).optional(),
+  assistant: z.record(z.any()).optional(),
+}).passthrough();
+
 export const VapiWebhookMessageSchema = z.discriminatedUnion('type', [
   VapiToolCallsMessageSchema,
   VapiCallEndedMessageSchema,
@@ -143,6 +156,7 @@ export const VapiWebhookMessageSchema = z.discriminatedUnion('type', [
   VapiStatusUpdateMessageSchema,
   VapiMetadataMessageSchema,
   VapiGhlToolMessageSchema,
+  VapiAssistantStartedMessageSchema,
 ]);
 
 export const VapiWebhookBodySchema = z.object({
