@@ -65,6 +65,22 @@ app.get('/', async (_req, res) => {
     slackChannelId: !!process.env.SLACK_CHANNEL_ID,
     clientsConfigured: configuredClients,
   };
+
+  // Inbound / HotProspector configs
+  const inboundConfigs = {
+    hpApiUid: !!process.env.HP_API_UID,
+    hpApiKey: !!process.env.HP_API_KEY,
+    hpGroupId: !!process.env.HP_GROUP_ID,
+    hpLocationId: !!process.env.HP_LOCATION_ID,
+    vapiAssistantDefaultId: !!process.env.VAPI_ASSISTANT_DEFAULT_ID,
+    vapiAssistantFallbackId: !!process.env.VAPI_ASSISTANT_FALLBACK_ID,
+    vapiWebhookSecret: !!process.env.VAPI_WEBHOOK_SECRET,
+  };
+
+  // Check which assistant IDs from Vapi are NOT mapped in client-config
+  const knownAssistantIds = allClients.map(c => c.assistantId);
+  const inboundDefaultId = process.env.VAPI_ASSISTANT_DEFAULT_ID || '';
+  const inboundFallbackId = process.env.VAPI_ASSISTANT_FALLBACK_ID || '';
   
   const configuredCount = Object.values(configs).filter(v => typeof v === 'boolean' ? v : v > 0).length;
   const totalConfigs = Object.keys(configs).length;
@@ -504,6 +520,105 @@ app.get('/', async (_req, res) => {
         </ul>
       </div>
       
+      <!-- Inbound / HotProspector Config -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon yellow">📞</div>
+          <h2 class="card-title">Inbound & HotProspector</h2>
+        </div>
+        <ul class="config-list">
+          <li class="config-item">
+            <span class="config-name">HP_API_UID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.hpApiUid ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.hpApiUid ? 'Configured' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">HP_API_KEY</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.hpApiKey ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.hpApiKey ? 'Configured' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">HP_GROUP_ID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.hpGroupId ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.hpGroupId ? 'Configured' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">HP_LOCATION_ID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.hpLocationId ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.hpLocationId ? 'Configured' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">VAPI_ASSISTANT_DEFAULT_ID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.vapiAssistantDefaultId ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.vapiAssistantDefaultId ? inboundDefaultId.substring(0, 8) + '...' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">VAPI_ASSISTANT_FALLBACK_ID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.vapiAssistantFallbackId ? 'ok' : 'warning'}"></span>
+              ${inboundConfigs.vapiAssistantFallbackId ? inboundFallbackId.substring(0, 8) + '...' : 'Not set'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">VAPI_WEBHOOK_SECRET</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.vapiWebhookSecret ? 'ok' : 'warning'}"></span>
+              ${inboundConfigs.vapiWebhookSecret ? 'Secured' : 'Not set'}
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Assistant ID Mapping Audit -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon purple">🔍</div>
+          <h2 class="card-title">Assistant ID Mapping</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.85rem;">
+          Assistants must be mapped in client-config to process end-of-call reports, GHL notes, and Slack uploads.
+        </p>
+        <ul class="config-list">
+          ${allClients.map(client => `
+          <li class="config-item">
+            <span class="config-name">${client.name}<br><span style="font-size:0.7rem;color:var(--text-secondary)">${client.assistantId.substring(0, 12)}...</span></span>
+            <span class="config-status">
+              <span class="status-dot ok"></span>
+              Mapped
+            </span>
+          </li>
+          `).join('')}
+          ${inboundDefaultId && !knownAssistantIds.includes(inboundDefaultId) ? `
+          <li class="config-item" style="background: rgba(255, 71, 87, 0.08); border-radius: 6px; padding: 10px 8px;">
+            <span class="config-name" style="color: var(--accent-yellow);">INBOUND DEFAULT<br><span style="font-size:0.7rem">${inboundDefaultId.substring(0, 12)}...</span></span>
+            <span class="config-status">
+              <span class="status-dot warning"></span>
+              Not in client-config
+            </span>
+          </li>
+          ` : ''}
+          ${inboundFallbackId && inboundFallbackId !== inboundDefaultId && !knownAssistantIds.includes(inboundFallbackId) ? `
+          <li class="config-item" style="background: rgba(255, 71, 87, 0.08); border-radius: 6px; padding: 10px 8px;">
+            <span class="config-name" style="color: var(--accent-yellow);">INBOUND FALLBACK<br><span style="font-size:0.7rem">${inboundFallbackId.substring(0, 12)}...</span></span>
+            <span class="config-status">
+              <span class="status-dot warning"></span>
+              Not in client-config
+            </span>
+          </li>
+          ` : ''}
+        </ul>
+      </div>
+
       <!-- Endpoints -->
       <div class="card">
         <div class="card-header">
