@@ -148,29 +148,45 @@ export class SlackService {
         } : null,
       });
       
-      // Extract first name from multiple possible sources (priority order)
+      // Extract first name and last name (GHL firstName/lastName first, then split "name" when needed)
       let leadFirstName = 'N/A';
-      if (fullCallData?.variables?.name) {
-        leadFirstName = fullCallData.variables.name;
-      } else if (fullCallData?.variableValues?.name) {
-        leadFirstName = fullCallData.variableValues.name;
-      } else if (fullCallData?.assistantOverrides?.variableValues?.name) {
-        leadFirstName = fullCallData.assistantOverrides.variableValues.name;
-      } else if (ghlMetadata?.contact?.name) {
-        leadFirstName = ghlMetadata.contact.name;
-      } else if (fullCallData?.metadata?.name) {
-        leadFirstName = fullCallData.metadata.name;
-      } else if (ghlMetadata?.contact?.firstName) {
+      let leadLastName = 'N/A';
+      if (ghlMetadata?.contact?.firstName) {
         leadFirstName = ghlMetadata.contact.firstName;
+        leadLastName = ghlMetadata.contact.lastName || 'N/A';
+      } else if (fullCallData?.variables?.name) {
+        const nameParts = fullCallData.variables.name.split(' ');
+        leadFirstName = nameParts[0] || 'N/A';
+        leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+      } else if (fullCallData?.variableValues?.name) {
+        const nameParts = fullCallData.variableValues.name.split(' ');
+        leadFirstName = nameParts[0] || 'N/A';
+        leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+      } else if (fullCallData?.assistantOverrides?.variableValues?.name) {
+        const nameParts = fullCallData.assistantOverrides.variableValues.name.split(' ');
+        leadFirstName = nameParts[0] || 'N/A';
+        leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+      } else if (ghlMetadata?.contact?.name) {
+        const nameParts = ghlMetadata.contact.name.split(' ');
+        leadFirstName = nameParts[0] || 'N/A';
+        leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+      } else if (fullCallData?.metadata?.name) {
+        const nameParts = fullCallData.metadata.name.split(' ');
+        leadFirstName = nameParts[0] || 'N/A';
+        leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+      } else {
+        if (fullCallData?.variables?.name) leadFirstName = fullCallData.variables.name;
+        else if (fullCallData?.variableValues?.name) leadFirstName = fullCallData.variableValues.name;
+        else if (fullCallData?.assistantOverrides?.variableValues?.name) leadFirstName = fullCallData.assistantOverrides.variableValues.name;
+        else if (ghlMetadata?.contact?.name) leadFirstName = ghlMetadata.contact.name;
+        else if (fullCallData?.metadata?.name) leadFirstName = fullCallData.metadata.name;
+        leadLastName = fullCallData?.variables?.lastName
+          || fullCallData?.variableValues?.lastName
+          || fullCallData?.assistantOverrides?.variableValues?.lastName
+          || ghlMetadata?.contact?.lastName
+          || fullCallData?.metadata?.lastName
+          || 'N/A';
       }
-      
-      // Extract last name from multiple sources
-      const leadLastName = fullCallData?.variables?.lastName
-        || fullCallData?.variableValues?.lastName
-        || fullCallData?.assistantOverrides?.variableValues?.lastName
-        || ghlMetadata?.contact?.lastName
-        || fullCallData?.metadata?.lastName
-        || 'N/A';
       
       // Extract contactId from GHL metadata
       const contactId = ghlMetadata?.contactId 
