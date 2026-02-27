@@ -113,6 +113,9 @@ export class SlackService {
       const clientName = assistantId ? ClientConfigManager.getClientName(assistantId) : 'Unknown Client';
       
       // DEBUG: Log all available data structures
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/45188c02-e418-44d6-9c05-ffe9db4a986c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'slack-service.ts:116',message:'Data structures for name extraction',data:{callId,ghlMetadata:ghlMetadata?{contact:ghlMetadata.contact}:null,fullCallData:fullCallData?{variables:fullCallData.variables,variableValues:fullCallData.variableValues,metadata:fullCallData.metadata}:null},hypothesisId:'H1',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       Logger.info('[SLACK_SERVICE] DEBUG - Available data structures', {
         callId,
         hasGhlMetadata: !!ghlMetadata,
@@ -151,6 +154,9 @@ export class SlackService {
       // Extract first name and last name (GHL firstName/lastName first, then split "name" when needed)
       let leadFirstName = 'N/A';
       let leadLastName = 'N/A';
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/45188c02-e418-44d6-9c05-ffe9db4a986c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'slack-service.ts:154',message:'Before name extraction logic',data:{ghlFirstName:ghlMetadata?.contact?.firstName,ghlLastName:ghlMetadata?.contact?.lastName,vapiName:fullCallData?.variables?.name},hypothesisId:'H2',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       if (ghlMetadata?.contact?.firstName) {
         leadFirstName = ghlMetadata.contact.firstName;
         leadLastName = ghlMetadata.contact.lastName || 'N/A';
@@ -175,6 +181,9 @@ export class SlackService {
         leadFirstName = nameParts[0] || 'N/A';
         leadLastName = nameParts.slice(1).join(' ') || 'N/A';
       } else {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/45188c02-e418-44d6-9c05-ffe9db4a986c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'slack-service.ts:182',message:'Entering fallback name extraction',data:{variables:fullCallData?.variables,variableValues:fullCallData?.variableValues},hypothesisId:'H3',timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         if (fullCallData?.variables?.name) leadFirstName = fullCallData.variables.name;
         else if (fullCallData?.variableValues?.name) leadFirstName = fullCallData.variableValues.name;
         else if (fullCallData?.assistantOverrides?.variableValues?.name) leadFirstName = fullCallData.assistantOverrides.variableValues.name;
@@ -230,6 +239,9 @@ export class SlackService {
         locationId,
         ghlContactLink,
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/45188c02-e418-44d6-9c05-ffe9db4a986c',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'slack-service.ts:237',message:'Final extracted names',data:{leadFirstName,leadLastName},hypothesisId:'H4',timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       
       // Format date: YYYY-MM-DD HH:MM:SS
       const now = new Date();

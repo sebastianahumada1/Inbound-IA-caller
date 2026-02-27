@@ -141,6 +141,14 @@ export class ClientConfigManager {
         locationIdVar: 'MIAMI_VALLEY_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY',
       },
+      {
+        name: 'Northeast',
+        assistantIdVar: 'NORTHEAST_ASSISTANT_ID',
+        apiKeyVar: 'NORTHEAST_GHL_API_KEY',
+        calendarIdVar: 'NORTHEAST_CALENDAR_ID',
+        locationIdVar: 'NORTHEAST_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_NORTHEAST',
+      },
     ];
 
     const missingConfigs: string[] = [];
