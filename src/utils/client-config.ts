@@ -12,6 +12,7 @@ export interface ClientConfig {
   assistantId: string;
   ghlApiKey: string;
   calendarId?: string;
+  callbackCalendarId?: string;
   locationId?: string;
   slackChannelId?: string;
 }
@@ -34,6 +35,7 @@ export class ClientConfigManager {
         assistantIdVar: 'PREMIER_WELLNESS_ASSISTANT_ID',
         apiKeyVar: 'PREMIER_WELLNESS_GHL_API_KEY',
         calendarIdVar: 'PREMIER_WELLNESS_CALENDAR_ID',
+        callbackCalendarIdVar: 'PREMIER_WELLNESS_CALLBACK_CALENDAR_ID',
         locationIdVar: 'PREMIER_WELLNESS_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS',
       },
@@ -42,6 +44,7 @@ export class ClientConfigManager {
         assistantIdVar: 'WEST_TEXAS_ASSISTANT_ID',
         apiKeyVar: 'WEST_TEXAS_GHL_API_KEY',
         calendarIdVar: 'WEST_TEXAS_CALENDAR_ID',
+        callbackCalendarIdVar: 'WEST_TEXAS_CALLBACK_CALENDAR_ID',
         locationIdVar: 'WEST_TEXAS_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS',
       },
@@ -50,6 +53,7 @@ export class ClientConfigManager {
         assistantIdVar: 'WEST_TEXAS_BACK_NECK_ASSISTANT_ID',
         apiKeyVar: 'WEST_TEXAS_BACK_NECK_GHL_API_KEY',
         calendarIdVar: 'WEST_TEXAS_BACK_NECK_CALENDAR_ID',
+        callbackCalendarIdVar: 'WEST_TEXAS_BACK_NECK_CALLBACK_CALENDAR_ID',
         locationIdVar: 'WEST_TEXAS_BACK_NECK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS_BACK_NECK',
       },
@@ -58,6 +62,7 @@ export class ClientConfigManager {
         assistantIdVar: 'THIRD_CLIENT_ASSISTANT_ID',
         apiKeyVar: 'THIRD_CLIENT_GHL_API_KEY',
         calendarIdVar: 'THIRD_CLIENT_CALENDAR_ID',
+        callbackCalendarIdVar: 'THIRD_CLIENT_CALLBACK_CALENDAR_ID',
         locationIdVar: 'THIRD_CLIENT_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_THIRD_CLIENT',
       },
@@ -66,6 +71,7 @@ export class ClientConfigManager {
         assistantIdVar: 'DATA_DRIVEN_PRACTICES_ASSISTANT_ID',
         apiKeyVar: 'DATA_DRIVEN_PRACTICES_GHL_API_KEY',
         calendarIdVar: 'DATA_DRIVEN_PRACTICES_CALENDAR_ID',
+        callbackCalendarIdVar: 'DATA_DRIVEN_PRACTICES_CALLBACK_CALENDAR_ID',
         locationIdVar: 'DATA_DRIVEN_PRACTICES_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_DATA_DRIVEN_PRACTICES',
       },
@@ -74,6 +80,7 @@ export class ClientConfigManager {
         assistantIdVar: 'NUVIVE_ASSISTANT_ID',
         apiKeyVar: 'NUVIVE_GHL_API_KEY',
         calendarIdVar: 'NUVIVE_CALENDAR_ID',
+        callbackCalendarIdVar: 'NUVIVE_CALLBACK_CALENDAR_ID',
         locationIdVar: 'NUVIVE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE',
       },
@@ -82,6 +89,7 @@ export class ClientConfigManager {
         assistantIdVar: 'NUVIVE_BACK_NECK_ASSISTANT_ID',
         apiKeyVar: 'NUVIVE_BACK_NECK_GHL_API_KEY',
         calendarIdVar: 'NUVIVE_BACK_NECK_CALENDAR_ID',
+        callbackCalendarIdVar: 'NUVIVE_BACK_NECK_CALLBACK_CALENDAR_ID',
         locationIdVar: 'NUVIVE_BACK_NECK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE_BACK_NECK',
       },
@@ -90,6 +98,7 @@ export class ClientConfigManager {
         assistantIdVar: 'JENNINGS_BACK_NECK_ASSISTANT_ID',
         apiKeyVar: 'JENNINGS_BACK_NECK_GHL_API_KEY',
         calendarIdVar: 'JENNINGS_BACK_NECK_CALENDAR_ID',
+        callbackCalendarIdVar: 'JENNINGS_BACK_NECK_CALLBACK_CALENDAR_ID',
         locationIdVar: 'JENNINGS_BACK_NECK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_JENNINGS_BACK_NECK',
       },
@@ -98,6 +107,7 @@ export class ClientConfigManager {
         assistantIdVar: 'NUWAVE_ASSISTANT_ID',
         apiKeyVar: 'NUWAVE_GHL_API_KEY',
         calendarIdVar: 'NUWAVE_CALENDAR_ID',
+        callbackCalendarIdVar: 'NUWAVE_CALLBACK_CALENDAR_ID',
         locationIdVar: 'NUWAVE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NUWAVE',
       },
@@ -106,6 +116,7 @@ export class ClientConfigManager {
         assistantIdVar: 'RELIEFSOURCE_ASSISTANT_ID',
         apiKeyVar: 'RELIEFSOURCE_GHL_API_KEY',
         calendarIdVar: 'RELIEFSOURCE_CALENDAR_ID',
+        callbackCalendarIdVar: 'RELIEFSOURCE_CALLBACK_CALENDAR_ID',
         locationIdVar: 'RELIEFSOURCE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_RELIEFSOURCE',
       },
@@ -114,6 +125,7 @@ export class ClientConfigManager {
         assistantIdVar: 'BELDEN_VILLAGE_ASSISTANT_ID',
         apiKeyVar: 'BELDEN_VILLAGE_GHL_API_KEY',
         calendarIdVar: 'BELDEN_VILLAGE_CALENDAR_ID',
+        callbackCalendarIdVar: 'BELDEN_VILLAGE_CALLBACK_CALENDAR_ID',
         locationIdVar: 'BELDEN_VILLAGE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_BELDEN_VILLAGE',
       },
@@ -122,6 +134,7 @@ export class ClientConfigManager {
         assistantIdVar: 'JAMES_HEALTH_CENTER_ASSISTANT_ID',
         apiKeyVar: 'JAMES_HEALTH_CENTER_GHL_API_KEY',
         calendarIdVar: 'JAMES_HEALTH_CENTER_CALENDAR_ID',
+        callbackCalendarIdVar: 'JAMES_HEALTH_CENTER_CALLBACK_CALENDAR_ID',
         locationIdVar: 'JAMES_HEALTH_CENTER_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_JAMES_HEALTH_CENTER',
       },
@@ -130,6 +143,7 @@ export class ClientConfigManager {
         assistantIdVar: 'AMPLIFY_LIFE_BALDWIN_ASSISTANT_ID',
         apiKeyVar: 'AMPLIFY_LIFE_BALDWIN_GHL_API_KEY',
         calendarIdVar: 'AMPLIFY_LIFE_BALDWIN_CALENDAR_ID',
+        callbackCalendarIdVar: 'AMPLIFY_LIFE_BALDWIN_CALLBACK_CALENDAR_ID',
         locationIdVar: 'AMPLIFY_LIFE_BALDWIN_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_BALDWIN',
       },
@@ -138,6 +152,7 @@ export class ClientConfigManager {
         assistantIdVar: 'MIAMI_VALLEY_ASSISTANT_ID',
         apiKeyVar: 'MIAMI_VALLEY_GHL_API_KEY',
         calendarIdVar: 'MIAMI_VALLEY_CALENDAR_ID',
+        callbackCalendarIdVar: 'MIAMI_VALLEY_CALLBACK_CALENDAR_ID',
         locationIdVar: 'MIAMI_VALLEY_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY',
       },
@@ -146,6 +161,7 @@ export class ClientConfigManager {
         assistantIdVar: 'NORTHEAST_ASSISTANT_ID',
         apiKeyVar: 'NORTHEAST_GHL_API_KEY',
         calendarIdVar: 'NORTHEAST_CALENDAR_ID',
+        callbackCalendarIdVar: 'NORTHEAST_CALLBACK_CALENDAR_ID',
         locationIdVar: 'NORTHEAST_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NORTHEAST',
       },
@@ -181,6 +197,14 @@ export class ClientConfigManager {
       const calendarId = process.env[clientDef.calendarIdVar];
       if (calendarId) {
         config.calendarId = calendarId;
+      }
+
+      // Add optional callback calendar ID if configured
+      if (clientDef.callbackCalendarIdVar) {
+        const callbackCalendarId = process.env[clientDef.callbackCalendarIdVar];
+        if (callbackCalendarId) {
+          config.callbackCalendarId = callbackCalendarId;
+        }
       }
 
       // Add optional location ID if configured
@@ -227,6 +251,9 @@ export class ClientConfigManager {
         // Copy optional properties only if they exist
         if (premierConfig.calendarId) {
           aliasConfig.calendarId = premierConfig.calendarId;
+        }
+        if (premierConfig.callbackCalendarId) {
+          aliasConfig.callbackCalendarId = premierConfig.callbackCalendarId;
         }
         if (premierConfig.locationId) {
           aliasConfig.locationId = premierConfig.locationId;
@@ -311,6 +338,14 @@ export class ClientConfigManager {
   static getCalendarId(assistantId: string): string | undefined {
     const config = this.getConfigByAssistantId(assistantId);
     return config?.calendarId;
+  }
+
+  /**
+   * Get Callback Calendar ID by Assistant ID
+   */
+  static getCallbackCalendarId(assistantId: string): string | undefined {
+    const config = this.getConfigByAssistantId(assistantId);
+    return config?.callbackCalendarId;
   }
 
   /**

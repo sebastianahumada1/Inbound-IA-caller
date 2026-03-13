@@ -9,6 +9,8 @@ import {
   UpdateStageArgs,
   CheckCalendarAvailabilityArgs,
   ScheduleAppointmentArgs,
+  CheckCallbackAvailabilityArgs,
+  ScheduleCallbackArgs,
   ToolResult,
 } from './schemas.js';
 
@@ -89,6 +91,28 @@ export class GHLConnector {
     }
 
     Logger.warn('[GHL_CONNECTOR] No calendar ID found for assistant', {
+      assistantId: this.assistantId,
+    });
+    return null;
+  }
+
+  /**
+   * Get the Callback Calendar ID based on Assistant ID
+   */
+  private getCallbackCalendarId(): string | null {
+    if (this.assistantId) {
+      const callbackCalendarId = ClientConfigManager.getCallbackCalendarId(this.assistantId);
+      if (callbackCalendarId) {
+        Logger.info('[GHL_CONNECTOR] Using client-specific callback calendar ID', {
+          assistantId: this.assistantId,
+          clientName: ClientConfigManager.getClientName(this.assistantId),
+          callbackCalendarId,
+        });
+        return callbackCalendarId;
+      }
+    }
+
+    Logger.warn('[GHL_CONNECTOR] No callback calendar ID found for assistant', {
       assistantId: this.assistantId,
     });
     return null;
@@ -711,65 +735,65 @@ export class GHLConnector {
   }
 
   async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, callId?: string, stateStorage?: any): Promise<ToolResult> {
+    const calendarId = this.getCalendarId();
+    if (!calendarId) {
+      const error = 'Calendar ID not configured for this client';
+      Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+      return { id, ok: false, error };
+    }
+    return this.checkAvailabilityInternal(id, args.dateTime, args.durationMinutes || 30, calendarId, 'appointment', callId, stateStorage);
+  }
+
+  async checkCallbackAvailability(id: string, args: CheckCallbackAvailabilityArgs, callId?: string, stateStorage?: any): Promise<ToolResult> {
+    const callbackCalendarId = this.getCallbackCalendarId();
+    if (!callbackCalendarId) {
+      const error = 'Callback Calendar ID not configured for this client';
+      Logger.error('[CALLBACK] ' + error, { id, assistantId: this.assistantId });
+      return { id, ok: false, error };
+    }
+    return this.checkAvailabilityInternal(id, args.dateTime, args.durationMinutes || 15, callbackCalendarId, 'callback', callId, stateStorage);
+  }
+
+  /**
+   * Shared logic for checking calendar availability (appointment or callback)
+   */
+  private async checkAvailabilityInternal(
+    id: string,
+    dateTime: string,
+    durationMinutes: number,
+    calendarId: string,
+    calendarType: 'appointment' | 'callback',
+    callId?: string,
+    stateStorage?: any,
+  ): Promise<ToolResult> {
+    const logPrefix = calendarType === 'callback' ? '[CALLBACK]' : '[CALENDAR]';
     try {
-      Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args });
+      Logger.info(`${logPrefix} Processing check_${calendarType}_availability`, { id, dateTime, durationMinutes, calendarId });
 
       const ghlApiKey = this.getGHLApiKey();
       if (!ghlApiKey) {
         const error = 'GHL_API_KEY not configured for this client';
-        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
-        return {
-          id,
-          ok: false,
-          error,
-        };
+        Logger.error(`${logPrefix} ${error}`, { id, assistantId: this.assistantId });
+        return { id, ok: false, error };
       }
 
-      const calendarId = this.getCalendarId();
-      if (!calendarId) {
-        const error = 'Calendar ID not configured for this client';
-        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
-        return {
-          id,
-          ok: false,
-          error,
-        };
-      }
-
-      // Correct common AI timezone conversion errors before checking
-      // Use transcript validation if available to ensure time matches what user said
-      const correctedDateTime = await this.correctAppointmentTimeWithTranscript(
-        args.dateTime,
-        callId,
-        stateStorage
-      );
+      const correctedDateTime = await this.correctAppointmentTimeWithTranscript(dateTime, callId, stateStorage);
       
-      Logger.info('[CALENDAR] DateTime correction applied', {
-        id,
-        original: args.dateTime,
-        corrected: correctedDateTime,
-        wasCorrected: args.dateTime !== correctedDateTime,
+      Logger.info(`${logPrefix} DateTime correction applied`, {
+        id, original: dateTime, corrected: correctedDateTime,
+        wasCorrected: dateTime !== correctedDateTime,
       });
       
-      // Parse the requested dateTime (using corrected version)
       const requestedDate = new Date(correctedDateTime);
       if (isNaN(requestedDate.getTime())) {
         const error = 'Invalid dateTime format';
-        Logger.error('[CALENDAR] ' + error, { id, dateTime: correctedDateTime });
-        return {
-          id,
-          ok: false,
-          error,
-        };
+        Logger.error(`${logPrefix} ${error}`, { id, dateTime: correctedDateTime });
+        return { id, ok: false, error };
       }
 
-      // Calculate end time based on duration
-      const endDate = new Date(requestedDate.getTime() + (args.durationMinutes || 30) * 60000);
-
-      // Query GHL Calendar API for free slots
-      // We'll check a range around the requested time
-      const startDate = new Date(requestedDate.getTime() - 60 * 60000); // 1 hour before
-      const endDateRange = new Date(requestedDate.getTime() + 2 * 60 * 60000); // 2 hours after
+      const endDate = new Date(requestedDate.getTime() + durationMinutes * 60000);
+      const startDate = new Date(requestedDate.getTime() - 60 * 60000);
+      const endDateRange = new Date(requestedDate.getTime() + 2 * 60 * 60000);
 
       const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
       const params = new URLSearchParams({
@@ -777,9 +801,8 @@ export class GHLConnector {
         endDate: endDateRange.getTime().toString(),
       });
 
-      Logger.info('[CALENDAR] Querying GHL Calendar API', {
-        id,
-        calendarId,
+      Logger.info(`${logPrefix} Querying GHL Calendar API`, {
+        id, calendarId, calendarType,
         requestedTime: requestedDate.toISOString(),
         queryRange: `${startDate.toISOString()} to ${endDateRange.toISOString()}`,
       });
@@ -795,81 +818,56 @@ export class GHLConnector {
       if (!response.ok) {
         const errorDetails = response.data ? JSON.stringify(response.data) : 'No error details';
         const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
-        Logger.error('[CALENDAR] ' + error, { 
-          id, 
-          calendarId,
+        Logger.error(`${logPrefix} ${error}`, { 
+          id, calendarId,
           apiUrl: `${apiUrl}?${params.toString()}`,
-          requestParams: {
-            startDate: startDate.toISOString(),
-            endDate: endDateRange.toISOString(),
-          },
+          requestParams: { startDate: startDate.toISOString(), endDate: endDateRange.toISOString() },
           responseData: response.data,
           responseStatus: response.status,
           responseStatusText: response.statusText,
           fullResponse: JSON.stringify(response.data),
         });
-        return {
-          id,
-          ok: false,
-          error: `${error}. Details: ${errorDetails}`,
-        };
+        return { id, ok: false, error: `${error}. Details: ${errorDetails}` };
       }
 
-      // Log the full response from GHL to understand the structure
-      Logger.info('[CALENDAR] Full GHL API response', {
-        id,
-        responseData: response.data,
+      Logger.info(`${logPrefix} Full GHL API response`, {
+        id, responseData: response.data,
         responseDataKeys: response.data ? Object.keys(response.data) : [],
         responseDataType: typeof response.data,
       });
 
-      // GHL returns slots organized by date: { "2025-12-23": { "slots": [...] } }
-      // Extract the date key for the requested date (format: YYYY-MM-DD)
       const requestedDateKey = requestedDate.toISOString().split('T')[0];
-      
-      // Get slots for the requested date
       const dateSlots = requestedDateKey && response.data ? response.data[requestedDateKey] : null;
       const freeSlots = dateSlots?.slots || [];
       
-      Logger.info('[CALENDAR] Free slots from GHL', {
-        id,
-        requestedDateKey,
-        freeSlotsCount: freeSlots.length,
-        freeSlots: freeSlots,
+      Logger.info(`${logPrefix} Free slots from GHL`, {
+        id, requestedDateKey,
+        freeSlotsCount: freeSlots.length, freeSlots,
         requestedDate: requestedDate.toISOString(),
         requestedDateTimestamp: requestedDate.getTime(),
         endDate: endDate.toISOString(),
         endDateTimestamp: endDate.getTime(),
       });
 
-      // GHL returns slots as ISO string times (e.g., "2025-12-23T10:00:00-05:00")
-      // Check if the requested time matches any of the available slot start times
-      // Since slots are 30-minute intervals, we check if requestedDate matches a slot start time
       const isAvailable = freeSlots.some((slotTime: string) => {
         const slotDate = new Date(slotTime);
-        
-        // Check if the requested time matches the slot start time (within 1 minute tolerance)
         const timeDiff = Math.abs(requestedDate.getTime() - slotDate.getTime());
-        const matches = timeDiff < 60000; // 1 minute tolerance
+        const matches = timeDiff < 60000;
         
-        Logger.debug('[CALENDAR] Comparing slot', {
-          slotTime,
-          slotDate: slotDate.toISOString(),
+        Logger.debug(`${logPrefix} Comparing slot`, {
+          slotTime, slotDate: slotDate.toISOString(),
           slotDateTimestamp: slotDate.getTime(),
           requestedDate: requestedDate.toISOString(),
           requestedDateTimestamp: requestedDate.getTime(),
-          timeDiffMs: timeDiff,
-          matches,
+          timeDiffMs: timeDiff, matches,
         });
         
         return matches;
       });
 
-      Logger.info('[CALENDAR] Availability check completed', {
-        id,
-        requestedTime: requestedDate.toISOString(),
-        isAvailable,
-        freeSlotsCount: freeSlots.length,
+      Logger.info(`${logPrefix} Availability check completed`, {
+        id, requestedTime: requestedDate.toISOString(),
+        isAvailable, freeSlotsCount: freeSlots.length, calendarType,
       });
 
       return {
@@ -878,31 +876,56 @@ export class GHLConnector {
         data: {
           available: isAvailable,
           requestedTime: requestedDate.toISOString(),
-          duration: args.durationMinutes || 30,
+          duration: durationMinutes,
+          calendarType,
           message: isAvailable 
-            ? 'The requested time slot is available' 
-            : 'The requested time slot is not available',
+            ? `The requested ${calendarType} time slot is available` 
+            : `The requested ${calendarType} time slot is not available`,
         },
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      Logger.error('[CALENDAR] Error in check_calendar_availability', { 
-        id, 
-        error: errorMessage 
-      });
-      return {
-        id,
-        ok: false,
-        error: errorMessage,
-      };
+      Logger.error(`${logPrefix} Error in check_${calendarType}_availability`, { id, error: errorMessage });
+      return { id, ok: false, error: errorMessage };
     }
   }
 
   async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, callId?: string, stateStorage?: any): Promise<ToolResult> {
+    const calendarId = this.getCalendarId();
+    if (!calendarId) {
+      const error = 'Calendar ID not configured for this client';
+      Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+      return { id, ok: false, error };
+    }
+    return this.scheduleEventInternal(id, args, calendarId, 'appointment', ghlMetadata, callId, stateStorage);
+  }
+
+  async scheduleCallback(id: string, args: ScheduleCallbackArgs, ghlMetadata?: any, callId?: string, stateStorage?: any): Promise<ToolResult> {
+    const callbackCalendarId = this.getCallbackCalendarId();
+    if (!callbackCalendarId) {
+      const error = 'Callback Calendar ID not configured for this client';
+      Logger.error('[CALLBACK] ' + error, { id, assistantId: this.assistantId });
+      return { id, ok: false, error };
+    }
+    return this.scheduleEventInternal(id, args, callbackCalendarId, 'callback', ghlMetadata, callId, stateStorage);
+  }
+
+  /**
+   * Shared logic for scheduling events in GHL (appointment or callback)
+   */
+  private async scheduleEventInternal(
+    id: string,
+    args: ScheduleAppointmentArgs | ScheduleCallbackArgs,
+    calendarId: string,
+    calendarType: 'appointment' | 'callback',
+    ghlMetadata?: any,
+    callId?: string,
+    stateStorage?: any,
+  ): Promise<ToolResult> {
+    const logPrefix = calendarType === 'callback' ? '[CALLBACK]' : '[CALENDAR]';
     try {
-      Logger.info('[CALENDAR] Processing schedule_appointment', { 
-        id, 
-        args, 
+      Logger.info(`${logPrefix} Processing schedule_${calendarType}`, { 
+        id, args, calendarId, calendarType,
         hasGhlMetadata: !!ghlMetadata,
         ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
         ghlMetadataContact: ghlMetadata?.contact ? {
@@ -920,41 +943,20 @@ export class GHLConnector {
       const ghlApiKey = this.getGHLApiKey();
       if (!ghlApiKey) {
         const error = 'GHL_API_KEY not configured for this client';
-        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
-        return {
-          id,
-          ok: false,
-          error,
-        };
-      }
-
-      const calendarId = this.getCalendarId();
-      if (!calendarId) {
-        const error = 'Calendar ID not configured for this client';
-        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
-        return {
-          id,
-          ok: false,
-          error,
-        };
+        Logger.error(`${logPrefix} ${error}`, { id, assistantId: this.assistantId });
+        return { id, ok: false, error };
       }
 
       // Try to get locationId (priority: config > calendar API)
       let locationId: string | undefined;
       
-      // First, try to get from config
       if (this.assistantId) {
         locationId = ClientConfigManager.getLocationId(this.assistantId);
         if (locationId) {
-          Logger.info('[CALENDAR] Using locationId from config', {
-            id,
-            calendarId,
-            locationId,
-          });
+          Logger.info(`${logPrefix} Using locationId from config`, { id, calendarId, locationId });
         }
       }
 
-      // If not in config, try to get from calendar info
       if (!locationId) {
         try {
           const calendarResponse = await this.httpClient.get(
@@ -969,17 +971,11 @@ export class GHLConnector {
           );
 
           if (calendarResponse.ok) {
-            // GHL API returns calendar data in different structures:
-            // Option 1: { calendar: { locationId: "..." } } - most common
-            // Option 2: { locationId: "..." }
-            // Option 3: { location: { id: "..." } }
             const calendarData = calendarResponse.data?.calendar || calendarResponse.data;
             locationId = calendarData?.locationId || calendarResponse.data?.locationId || calendarData?.location?.id || calendarResponse.data?.location?.id;
             
-            Logger.info('[CALENDAR] Retrieved locationId from calendar', {
-              id,
-              calendarId,
-              locationId,
+            Logger.info(`${logPrefix} Retrieved locationId from calendar`, {
+              id, calendarId, locationId,
               calendarDataKeys: calendarResponse.data ? Object.keys(calendarResponse.data) : [],
               calendarKeys: calendarData ? Object.keys(calendarData) : [],
               hasLocationId: !!calendarData?.locationId,
@@ -988,105 +984,69 @@ export class GHLConnector {
               fullCalendarData: JSON.stringify(calendarResponse.data).substring(0, 500),
             });
           } else {
-            Logger.warn('[CALENDAR] Could not retrieve calendar info for locationId', {
-              id,
-              calendarId,
-              status: calendarResponse.status,
+            Logger.warn(`${logPrefix} Could not retrieve calendar info for locationId`, {
+              id, calendarId, status: calendarResponse.status,
             });
           }
         } catch (error) {
-          Logger.warn('[CALENDAR] Error retrieving calendar info for locationId', {
-            id,
-            calendarId,
+          Logger.warn(`${logPrefix} Error retrieving calendar info for locationId`, {
+            id, calendarId,
             error: error instanceof Error ? error.message : 'Unknown error',
           });
         }
       }
 
-      // Correct common AI timezone conversion errors before validating
-      // Use transcript validation if available to ensure time matches what user said
-      const correctedStartTime = await this.correctAppointmentTimeWithTranscript(
-        args.startTime,
-        callId,
-        stateStorage
-      );
-      const correctedEndTime = await this.correctAppointmentTimeWithTranscript(
-        args.endTime,
-        callId,
-        stateStorage
-      );
+      const correctedStartTime = await this.correctAppointmentTimeWithTranscript(args.startTime, callId, stateStorage);
+      const correctedEndTime = await this.correctAppointmentTimeWithTranscript(args.endTime, callId, stateStorage);
       
-      Logger.info('[CALENDAR] Time correction applied for validation', {
+      Logger.info(`${logPrefix} Time correction applied for validation`, {
         id,
-        originalStartTime: args.startTime,
-        correctedStartTime,
-        originalEndTime: args.endTime,
-        correctedEndTime,
+        originalStartTime: args.startTime, correctedStartTime,
+        originalEndTime: args.endTime, correctedEndTime,
         startTimeWasCorrected: args.startTime !== correctedStartTime,
         endTimeWasCorrected: args.endTime !== correctedEndTime,
       });
       
-      // Validate date formats (using corrected times)
       const startTime = new Date(correctedStartTime);
       const endTime = new Date(correctedEndTime);
 
       if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
         const error = 'Invalid date format for startTime or endTime';
-        Logger.error('[CALENDAR] ' + error, { id, startTime: correctedStartTime, endTime: correctedEndTime });
-        return {
-          id,
-          ok: false,
-          error,
-        };
+        Logger.error(`${logPrefix} ${error}`, { id, startTime: correctedStartTime, endTime: correctedEndTime });
+        return { id, ok: false, error };
       }
 
       if (endTime <= startTime) {
         const error = 'endTime must be after startTime';
-        Logger.error('[CALENDAR] ' + error, { id, args });
-        return {
-          id,
-          ok: false,
-          error,
-        };
+        Logger.error(`${logPrefix} ${error}`, { id, args });
+        return { id, ok: false, error };
       }
 
-      // Try to get contact details from multiple sources (priority order):
-      // 1. args.phone (passed directly by AI agent)
-      // 2. GHL metadata (from webhook)
-      // 3. API call (if contactId provided)
+      // Resolve contact details from multiple sources
       let contactPhone = '';
       let contactFirstName = '';
       let contactLastName = '';
 
-      // First priority: phone from args (passed directly by AI agent)
       if (args.phone) {
         contactPhone = args.phone;
-        Logger.info('[CALENDAR] Using phone from args', {
-          id,
-          phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
+        Logger.info(`${logPrefix} Using phone from args`, {
+          id, phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
         });
       }
 
-      // Second priority: GHL metadata (from webhook)
       if (!contactPhone && ghlMetadata?.contact) {
-        Logger.info('[CALENDAR] Using contact details from GHL metadata', {
-          id,
-          hasContact: !!ghlMetadata.contact,
-        });
+        Logger.info(`${logPrefix} Using contact details from GHL metadata`, { id, hasContact: !!ghlMetadata.contact });
         
         contactPhone = ghlMetadata.contact.phone || ghlMetadata.contact.phoneNumber || '';
         contactFirstName = ghlMetadata.contact.firstName || '';
         contactLastName = ghlMetadata.contact.lastName || '';
 
-        Logger.info('[CALENDAR] Contact details from metadata', {
-          id,
-          firstName: contactFirstName,
-          lastName: contactLastName,
+        Logger.info(`${logPrefix} Contact details from metadata`, {
+          id, firstName: contactFirstName, lastName: contactLastName,
           phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
         });
       }
 
-      // Parse name from args.name (only if we don't have it from metadata)
       if (!contactFirstName || !contactLastName) {
         const nameParts = args.name.trim().split(/\s+/);
         if (!contactFirstName) {
@@ -1094,24 +1054,18 @@ export class GHLConnector {
         }
         if (!contactLastName) {
           contactLastName = nameParts.slice(1).join(' ') || '';
-          // GHL might require lastName, use firstName if empty
           if (!contactLastName && contactFirstName) {
             contactLastName = contactFirstName;
           }
         }
       }
 
-      // Normalize phone (remove spaces and special characters, keep + and numbers)
       if (contactPhone) {
         contactPhone = contactPhone.replace(/\s+/g, '').trim();
       }
 
-      // Third priority: Only try API if we're missing phone AND have contactId
       if (!contactPhone && args.contactId) {
-        Logger.info('[CALENDAR] Attempting to fetch phone from API', {
-          id,
-          contactId: args.contactId,
-        });
+        Logger.info(`${logPrefix} Attempting to fetch phone from API`, { id, contactId: args.contactId });
 
         try {
           const contactResponse = await this.httpClient.get(
@@ -1128,125 +1082,80 @@ export class GHLConnector {
           if (contactResponse.ok) {
             const contact = contactResponse.data?.contact || contactResponse.data;
             contactPhone = contact.phone || contact.phoneNumber || '';
-            
-            // Normalize phone
             if (contactPhone) {
               contactPhone = contactPhone.replace(/\s+/g, '').trim();
             }
-
-            Logger.info('[CALENDAR] Phone retrieved from API', {
-              id,
-              contactId: args.contactId,
+            Logger.info(`${logPrefix} Phone retrieved from API`, {
+              id, contactId: args.contactId,
               phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
             });
           } else {
-            Logger.warn('[CALENDAR] Could not fetch phone from API', {
-              id,
-              contactId: args.contactId,
-              status: contactResponse.status,
-              statusText: contactResponse.statusText,
+            Logger.warn(`${logPrefix} Could not fetch phone from API`, {
+              id, contactId: args.contactId, status: contactResponse.status, statusText: contactResponse.statusText,
             });
           }
         } catch (error) {
-          Logger.warn('[CALENDAR] Error fetching phone from API', {
-            id,
-            contactId: args.contactId,
+          Logger.warn(`${logPrefix} Error fetching phone from API`, {
+            id, contactId: args.contactId,
             error: error instanceof Error ? error.message : 'Unknown error',
           });
         }
       }
 
-      // Phone is required by GHL API
       if (!contactPhone) {
         const error = 'Phone number is required but could not be retrieved from contact metadata or API. Please ensure the contact has a phone number in GHL or that the phone is included in the webhook metadata.';
-        Logger.error('[CALENDAR] ' + error, { 
-          id, 
-          contactId: args.contactId,
+        Logger.error(`${logPrefix} ${error}`, { 
+          id, contactId: args.contactId,
           hasGhlMetadata: !!ghlMetadata,
           hasGhlContact: !!ghlMetadata?.contact,
           ghlContactKeys: ghlMetadata?.contact ? Object.keys(ghlMetadata.contact) : [],
         });
-        return {
-          id,
-          ok: false,
-          error,
-        };
+        return { id, ok: false, error };
       }
 
-      // Create appointment in GHL Calendar using the correct endpoint
-      // GHL requires: /calendars/events/appointments with firstName, lastName, phone, selectedSlot
       const apiUrl = `https://services.leadconnectorhq.com/calendars/events/appointments`;
       
-      // GHL expects selectedSlot as ISO string with timezone
-      // Use correctedStartTime (already corrected above)
-      // If startTime is already in correct format, use it; otherwise convert
       let selectedSlot = correctedStartTime;
       if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00') && !selectedSlot.includes('-06:00')) {
-        // If no timezone, assume EST and add it
         const date = new Date(correctedStartTime);
         selectedSlot = date.toISOString().replace('Z', '-05:00');
       }
 
-      // Normalize phone number - GHL requires E.164 format (with + and country code)
-      let normalizedPhone = contactPhone;
+      let normalizedPhone = contactPhone.replace(/[\s\-\(\)\.]/g, '').trim();
       
-      // Remove all spaces and special characters except +
-      normalizedPhone = normalizedPhone.replace(/[\s\-\(\)\.]/g, '').trim();
-      
-      // If phone doesn't start with +, try to add country code
       if (!normalizedPhone.startsWith('+')) {
-        // If it's a US number (10 digits), add +1
         if (/^\d{10}$/.test(normalizedPhone)) {
           normalizedPhone = '+1' + normalizedPhone;
-        }
-        // If it's a Colombian number (10 digits starting with 3), add +57
-        else if (/^3\d{9}$/.test(normalizedPhone)) {
+        } else if (/^3\d{9}$/.test(normalizedPhone)) {
           normalizedPhone = '+57' + normalizedPhone;
-        }
-        // Otherwise, assume it needs + prefix (might be missing country code)
-        else if (/^\d+$/.test(normalizedPhone)) {
-          // Keep as is but log warning - might need country code
-          Logger.warn('[CALENDAR] Phone number missing country code, using as-is', {
-            id,
-            phone: normalizedPhone,
-          });
+        } else if (/^\d+$/.test(normalizedPhone)) {
+          Logger.warn(`${logPrefix} Phone number missing country code, using as-is`, { id, phone: normalizedPhone });
         }
       }
       
-      // Ensure phone is in E.164 format (starts with +)
       if (!normalizedPhone.startsWith('+')) {
-        Logger.warn('[CALENDAR] Phone number not in E.164 format, adding +', {
-          id,
-          originalPhone: contactPhone,
-          normalizedPhone,
+        Logger.warn(`${logPrefix} Phone number not in E.164 format, adding +`, {
+          id, originalPhone: contactPhone, normalizedPhone,
         });
         normalizedPhone = '+' + normalizedPhone;
       }
 
-      // Get contactId - contact always exists if call happened, so we must find it
+      // Resolve contactId from multiple sources
       let contactIdToUse: string | undefined = args.contactId;
       
-      // Priority 1: Try to get contactId from GHL metadata (from webhook)
       if (!contactIdToUse && ghlMetadata) {
         contactIdToUse = ghlMetadata.contactId || ghlMetadata.contact?.id;
         if (contactIdToUse) {
-          Logger.info('[CALENDAR] Using contactId from GHL metadata', {
-            id,
-            contactId: contactIdToUse,
-          });
+          Logger.info(`${logPrefix} Using contactId from GHL metadata`, { id, contactId: contactIdToUse });
         }
       }
       
-      // Priority 2: Search for existing contact by phone (contact always exists)
       if (!contactIdToUse && normalizedPhone) {
         try {
-          Logger.info('[CALENDAR] Searching for existing contact by phone', {
-            id,
-            phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+          Logger.info(`${logPrefix} Searching for existing contact by phone`, {
+            id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
           });
           
-          // Try different search endpoints/formats
-          // Option 1: Search by phone with + prefix
           let searchResponse = await this.httpClient.get(
             `https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(normalizedPhone)}`,
             {
@@ -1258,7 +1167,6 @@ export class GHLConnector {
             }
           );
           
-          // Option 2: If that fails, try without + prefix
           if (!searchResponse.ok && normalizedPhone.startsWith('+')) {
             const phoneWithoutPlus = normalizedPhone.substring(1);
             searchResponse = await this.httpClient.get(
@@ -1277,97 +1185,69 @@ export class GHLConnector {
             const contacts = searchResponse.data?.contacts || searchResponse.data?.data?.contacts || [];
             if (contacts.length > 0) {
               contactIdToUse = contacts[0].id;
-              Logger.info('[CALENDAR] Found existing contact by phone', {
-                id,
-                contactId: contactIdToUse,
+              Logger.info(`${logPrefix} Found existing contact by phone`, {
+                id, contactId: contactIdToUse,
                 phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
               });
             } else {
-              Logger.warn('[CALENDAR] No contacts found by phone search', {
-                id,
-                phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+              Logger.warn(`${logPrefix} No contacts found by phone search`, {
+                id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
                 responseData: searchResponse.data,
               });
             }
           } else {
-            Logger.warn('[CALENDAR] Contact search failed', {
-              id,
-              phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
-              status: searchResponse.status,
-              statusText: searchResponse.statusText,
+            Logger.warn(`${logPrefix} Contact search failed`, {
+              id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+              status: searchResponse.status, statusText: searchResponse.statusText,
             });
           }
         } catch (error) {
-          Logger.warn('[CALENDAR] Error searching for contact', {
-            id,
-            error: error instanceof Error ? error.message : 'Unknown error',
+          Logger.warn(`${logPrefix} Error searching for contact`, {
+            id, error: error instanceof Error ? error.message : 'Unknown error',
           });
         }
       }
       
-      // If we still don't have contactId, we can't proceed - contact must exist
       if (!contactIdToUse && normalizedPhone) {
         const error = `Contact ID is required but could not be found. The contact should exist in GHL (phone: ${normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing'}). Please ensure the contact exists or provide contactId in the arguments.`;
-        Logger.error('[CALENDAR] ' + error, { 
-          id, 
-          phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+        Logger.error(`${logPrefix} ${error}`, { 
+          id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
           hasGhlMetadata: !!ghlMetadata,
           ghlMetadataContactId: ghlMetadata?.contactId || ghlMetadata?.contact?.id,
         });
-        return {
-          id,
-          ok: false,
-          error,
-        };
+        return { id, ok: false, error };
       }
       
-      // GHL requires contactId - we should have it by now since contact always exists
       if (!contactIdToUse) {
-        const error = 'Contact ID is required to schedule appointment. Contact should exist in GHL but could not be found.';
-        Logger.error('[CALENDAR] ' + error, { 
-          id,
-          phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+        const error = `Contact ID is required to schedule ${calendarType}. Contact should exist in GHL but could not be found.`;
+        Logger.error(`${logPrefix} ${error}`, { 
+          id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
         });
-        return {
-          id,
-          ok: false,
-          error,
-        };
+        return { id, ok: false, error };
       }
       
-      // Use contactId in payload (required by GHL)
       const payload: any = {
         calendarId,
         contactId: contactIdToUse,
         selectedSlot,
-        selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
+        selectedTimezone: 'America/New_York',
         notes: args.notes || '',
       };
       
-      Logger.info('[CALENDAR] Using contactId in payload', {
-        id,
-        contactId: contactIdToUse,
+      Logger.info(`${logPrefix} Using contactId in payload`, {
+        id, contactId: contactIdToUse,
         payload: { ...payload, contactId: contactIdToUse },
       });
 
-      // Add locationId if available (some GHL endpoints require it)
       if (locationId) {
         payload.locationId = locationId;
-        Logger.info('[CALENDAR] Added locationId to payload', {
-          id,
-          locationId,
-          payloadWithLocationId: payload,
-        });
+        Logger.info(`${logPrefix} Added locationId to payload`, { id, locationId, payloadWithLocationId: payload });
       } else {
-        Logger.warn('[CALENDAR] locationId not available, payload will not include it', {
-          id,
-          calendarId,
-        });
+        Logger.warn(`${logPrefix} locationId not available, payload will not include it`, { id, calendarId });
       }
 
-      Logger.info('[CALENDAR] Creating appointment in GHL', {
-        id,
-        calendarId,
+      Logger.info(`${logPrefix} Creating ${calendarType} in GHL`, {
+        id, calendarId, calendarType,
         contactId: args.contactId || 'not provided',
         selectedSlot,
         startTime: startTime.toISOString(),
@@ -1387,9 +1267,8 @@ export class GHLConnector {
       });
 
       if (response.ok) {
-        Logger.info('[CALENDAR] Appointment created successfully', { 
-          id, 
-          appointmentId: response.data?.id,
+        Logger.info(`${logPrefix} ${calendarType} created successfully`, { 
+          id, appointmentId: response.data?.id,
           contactId: args.contactId || 'not provided',
           responseData: response.data,
         });
@@ -1399,43 +1278,31 @@ export class GHLConnector {
           data: {
             appointmentId: response.data?.id,
             calendarId,
+            calendarType,
             contactId: args.contactId || undefined,
             startTime: startTime.toISOString(),
             endTime: endTime.toISOString(),
-            message: 'Appointment scheduled successfully',
+            message: `${calendarType === 'callback' ? 'Callback' : 'Appointment'} scheduled successfully`,
           },
         };
       } else {
         const errorDetails = response.data ? JSON.stringify(response.data) : 'No error details';
         const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
-        Logger.error('[CALENDAR] ' + error, { 
-          id, 
-          calendarId,
+        Logger.error(`${logPrefix} ${error}`, { 
+          id, calendarId,
           contactId: args.contactId || 'not provided',
-          apiUrl,
-          payload,
+          apiUrl, payload,
           responseData: response.data,
           responseStatus: response.status,
           responseStatusText: response.statusText,
           fullResponse: JSON.stringify(response.data),
         });
-        return {
-          id,
-          ok: false,
-          error: `${error}. Details: ${errorDetails}`,
-        };
+        return { id, ok: false, error: `${error}. Details: ${errorDetails}` };
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      Logger.error('[CALENDAR] Error in schedule_appointment', { 
-        id, 
-        error: errorMessage 
-      });
-      return {
-        id,
-        ok: false,
-        error: errorMessage,
-      };
+      Logger.error(`${logPrefix} Error in schedule_${calendarType}`, { id, error: errorMessage });
+      return { id, ok: false, error: errorMessage };
     }
   }
 }

@@ -4,7 +4,7 @@ import { Logger } from './utils/logger.js';
 import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
-import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, } from './schemas.js';
+import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, CheckCallbackAvailabilityArgsSchema, ScheduleCallbackArgsSchema, } from './schemas.js';
 export class VapiWebhookHandler {
     ghlConnector;
     vapiApiClient;
@@ -130,7 +130,9 @@ export class VapiWebhookHandler {
                 // Extract GHL metadata from call metadata if available
                 // GHL sends metadata.ghl.contactId when it triggers Vapi
                 const ghlMetadata = message.call?.metadata?.ghl || null;
+                const callId = message.call?.id;
                 Logger.info('[VAPI] Extracted GHL metadata for tool-calls', {
+                    callId,
                     hasGhlMetadata: !!ghlMetadata,
                     ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
                     contactId: ghlMetadata?.contactId,
@@ -140,13 +142,13 @@ export class VapiWebhookHandler {
                     contactPhoneNumber: ghlMetadata?.contact?.phoneNumber,
                     fullGhlMetadata: JSON.stringify(ghlMetadata).substring(0, 500),
                 });
-                return await this.handleToolCalls(message.toolCallList, assistantId, ghlMetadata);
+                return await this.handleToolCalls(message.toolCallList, assistantId, ghlMetadata, callId);
             case 'call.ended':
                 return this.handleCallEnded(message);
             case 'end-of-call-report':
                 return await this.handleEndOfCallReport(message);
             case 'transcript':
-                return this.handleTranscript(message);
+                return await this.handleTranscript(message);
             case 'status-update':
                 return this.handleStatusUpdate(message);
             case 'metadata':
@@ -161,10 +163,11 @@ export class VapiWebhookHandler {
                 };
         }
     }
-    async handleToolCalls(toolCallList, assistantId, ghlMetadata) {
+    async handleToolCalls(toolCallList, assistantId, ghlMetadata, callId) {
         Logger.info('Processing tool calls', {
             count: toolCallList.length,
             assistantId,
+            callId,
             hasGhlMetadata: !!ghlMetadata,
         });
         // Set assistant ID in GHL connector if available
@@ -174,7 +177,7 @@ export class VapiWebhookHandler {
         const vapiResults = [];
         // Process tool calls sequentially to avoid overwhelming GHL
         for (const toolCall of toolCallList) {
-            const result = await this.dispatchToolCall(toolCall, ghlMetadata);
+            const result = await this.dispatchToolCall(toolCall, ghlMetadata, callId);
             // Convert to Vapi format: toolCallId and result (as string)
             let resultString;
             if (result.ok) {
@@ -200,9 +203,9 @@ export class VapiWebhookHandler {
             results: vapiResults,
         };
     }
-    async dispatchToolCall(toolCall, ghlMetadata) {
+    async dispatchToolCall(toolCall, ghlMetadata, callId) {
         const { id, name, arguments: args } = toolCall;
-        Logger.info('Dispatching tool call', { id, name, args, hasGhlMetadata: !!ghlMetadata });
+        Logger.info('Dispatching tool call', { id, name, callId, args, hasGhlMetadata: !!ghlMetadata });
         try {
             switch (name) {
                 case 'send_sms':
@@ -216,9 +219,13 @@ export class VapiWebhookHandler {
                 case 'update_stage':
                     return await this.handleUpdateStage(id, args);
                 case 'check_calendar_availability':
-                    return await this.handleCheckCalendarAvailability(id, args);
+                    return await this.handleCheckCalendarAvailability(id, args, callId);
                 case 'schedule_appointment':
-                    return await this.handleScheduleAppointment(id, args, ghlMetadata);
+                    return await this.handleScheduleAppointment(id, args, ghlMetadata, callId);
+                case 'check_callback_availability':
+                    return await this.handleCheckCallbackAvailability(id, args, callId);
+                case 'schedule_callback':
+                    return await this.handleScheduleCallback(id, args, ghlMetadata, callId);
                 default:
                     Logger.warn('Unknown tool name', { id, name });
                     return {
@@ -323,10 +330,10 @@ export class VapiWebhookHandler {
             throw error;
         }
     }
-    async handleCheckCalendarAvailability(id, args) {
+    async handleCheckCalendarAvailability(id, args, callId) {
         try {
             const validatedArgs = CheckCalendarAvailabilityArgsSchema.parse(args);
-            return await this.ghlConnector.checkCalendarAvailability(id, validatedArgs);
+            return await this.ghlConnector.checkCalendarAvailability(id, validatedArgs, callId, this.stateStorage);
         }
         catch (error) {
             if (error instanceof ZodError) {
@@ -340,14 +347,48 @@ export class VapiWebhookHandler {
             throw error;
         }
     }
-    async handleScheduleAppointment(id, args, ghlMetadata) {
+    async handleScheduleAppointment(id, args, ghlMetadata, callId) {
         try {
             const validatedArgs = ScheduleAppointmentArgsSchema.parse(args);
-            return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata);
+            return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata, callId, this.stateStorage);
         }
         catch (error) {
             if (error instanceof ZodError) {
                 Logger.error('Invalid schedule_appointment arguments', { id, errors: error.issues });
+                return {
+                    id,
+                    ok: false,
+                    error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+                };
+            }
+            throw error;
+        }
+    }
+    async handleCheckCallbackAvailability(id, args, callId) {
+        try {
+            const validatedArgs = CheckCallbackAvailabilityArgsSchema.parse(args);
+            return await this.ghlConnector.checkCallbackAvailability(id, validatedArgs, callId, this.stateStorage);
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                Logger.error('Invalid check_callback_availability arguments', { id, errors: error.issues });
+                return {
+                    id,
+                    ok: false,
+                    error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+                };
+            }
+            throw error;
+        }
+    }
+    async handleScheduleCallback(id, args, ghlMetadata, callId) {
+        try {
+            const validatedArgs = ScheduleCallbackArgsSchema.parse(args);
+            return await this.ghlConnector.scheduleCallback(id, validatedArgs, ghlMetadata, callId, this.stateStorage);
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                Logger.error('Invalid schedule_callback arguments', { id, errors: error.issues });
                 return {
                     id,
                     ok: false,
@@ -492,7 +533,7 @@ export class VapiWebhookHandler {
             hasAnalysis: !!message.analysis,
         });
     }
-    handleTranscript(message) {
+    async handleTranscript(message) {
         Logger.info('Transcript received', {
             callId: message.call?.id,
             timestamp: message.timestamp,
@@ -501,6 +542,10 @@ export class VapiWebhookHandler {
             transcriptLength: message.transcript?.length || 0,
             transcript: message.isFinal ? message.transcript : message.transcript?.substring(0, 100) + '...',
         });
+        // Store transcript for later validation of appointment times
+        if (message.call?.id && message.transcript) {
+            await this.stateStorage.storeTranscript(message.call.id, message.transcript, message.role);
+        }
         // Log transcript info but don't save to files - only send summary note to GHL
         if (message.call?.id && message.transcript && message.isFinal) {
             Logger.info('[TRANSCRIPT] Final transcript received, will be included in GHL summary note', {

@@ -17,6 +17,8 @@ export declare class VapiWebhookHandler {
     private handleUpdateStage;
     private handleCheckCalendarAvailability;
     private handleScheduleAppointment;
+    private handleCheckCallbackAvailability;
+    private handleScheduleCallback;
     private handleCallEnded;
     private handleEndOfCallReport;
     private processEndOfCallReport;

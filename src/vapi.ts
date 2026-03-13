@@ -16,6 +16,8 @@ import {
   UpdateStageArgsSchema,
   CheckCalendarAvailabilityArgsSchema,
   ScheduleAppointmentArgsSchema,
+  CheckCallbackAvailabilityArgsSchema,
+  ScheduleCallbackArgsSchema,
   ToolResult,
   WebhookResponse,
 } from './schemas.js';
@@ -280,6 +282,12 @@ export class VapiWebhookHandler {
         case 'schedule_appointment':
           return await this.handleScheduleAppointment(id, args, ghlMetadata, callId);
         
+        case 'check_callback_availability':
+          return await this.handleCheckCallbackAvailability(id, args, callId);
+        
+        case 'schedule_callback':
+          return await this.handleScheduleCallback(id, args, ghlMetadata, callId);
+        
         default:
           Logger.warn('Unknown tool name', { id, name });
           return {
@@ -408,6 +416,40 @@ export class VapiWebhookHandler {
     } catch (error) {
       if (error instanceof ZodError) {
         Logger.error('Invalid schedule_appointment arguments', { id, errors: error.issues });
+        return {
+          id,
+          ok: false,
+          error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+        };
+      }
+      throw error;
+    }
+  }
+
+  private async handleCheckCallbackAvailability(id: string, args: any, callId?: string): Promise<ToolResult> {
+    try {
+      const validatedArgs = CheckCallbackAvailabilityArgsSchema.parse(args);
+      return await this.ghlConnector.checkCallbackAvailability(id, validatedArgs, callId, this.stateStorage);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        Logger.error('Invalid check_callback_availability arguments', { id, errors: error.issues });
+        return {
+          id,
+          ok: false,
+          error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+        };
+      }
+      throw error;
+    }
+  }
+
+  private async handleScheduleCallback(id: string, args: any, ghlMetadata?: any, callId?: string): Promise<ToolResult> {
+    try {
+      const validatedArgs = ScheduleCallbackArgsSchema.parse(args);
+      return await this.ghlConnector.scheduleCallback(id, validatedArgs, ghlMetadata, callId, this.stateStorage);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        Logger.error('Invalid schedule_callback arguments', { id, errors: error.issues });
         return {
           id,
           ok: false,
