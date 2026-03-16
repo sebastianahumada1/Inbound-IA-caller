@@ -149,6 +149,15 @@ export class ClientConfigManager {
                 locationIdVar: 'NORTHEAST_LOCATION_ID',
                 slackChannelVar: 'SLACK_CHANNEL_ID_NORTHEAST',
             },
+            {
+                name: 'Restore Integrated Neuro',
+                assistantIdVar: 'RESTORE_INTEGRATED_NEURO_ASSISTANT_ID',
+                apiKeyVar: 'RESTORE_INTEGRATED_NEURO_GHL_API_KEY',
+                calendarIdVar: 'RESTORE_INTEGRATED_NEURO_CALENDAR_ID',
+                callbackCalendarIdVar: 'RESTORE_INTEGRATED_NEURO_CALLBACK_CALENDAR_ID',
+                locationIdVar: 'RESTORE_INTEGRATED_NEURO_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_RESTORE_INTEGRATED_NEURO',
+            },
         ];
         const missingConfigs = [];
         const configuredClients = [];
