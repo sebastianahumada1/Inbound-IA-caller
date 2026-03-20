@@ -122,11 +122,7 @@ export async function hotProspectorSearchByPhone(
     Method: "SearchByUserInput",
   };
 
-  if (locationId) {
-    body.locationId = locationId;
-  }
-
-  const resp = await fetch("https://hotprospector.com/glu/custom_api", {
+  const resp = await fetch("https://app.hotprospector.com/glu/custom_api", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
