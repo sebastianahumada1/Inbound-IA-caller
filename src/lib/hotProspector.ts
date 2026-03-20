@@ -137,11 +137,13 @@ export async function hotProspectorSearchByPhone(
     throw new Error(`HotProspector HTTP ${resp.status}: ${text}`);
   }
 
-  const data = (await resp.json()) as HotProspectorResponse;
-  const results = Array.isArray(data.Results) ? data.Results : [];
+  const raw = await resp.json();
+  // HP API wraps the response in an array: [{response, Results, message}]
+  const data: HotProspectorResponse = Array.isArray(raw) ? raw[0] : raw;
+  const results = Array.isArray(data?.Results) ? data.Results : [];
 
   const result: HotProspectorSearchResult = {
-    ok: data.response === "true" || data.response === true,
+    ok: data?.response === "true" || data?.response === true,
     count: results.length,
     lead: results[0] ?? null,
   };
