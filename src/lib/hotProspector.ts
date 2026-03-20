@@ -62,14 +62,18 @@ export type HotProspectorSearchResult = {
 
 // ────────────────────────────── Helpers ─────────────────────────────
 
-/** Strip everything that is not a digit, then remove US country code prefix */
+/** Strip everything that is not a digit. 
+ * HP stores numbers as 10 digits (no country code) for US.
+ */
 function digitsOnly(phone: string): string {
   let digits = phone.replace(/\D/g, "");
-  // HP stores US numbers as 10 digits (no country code)
-  // If we got 11 digits starting with "1", strip the leading "1"
+  
+  // If we have a full E.164 (like 13008669878), we need to decide 
+  // if we strip the country code "1" to match HP's 10-digit format.
   if (digits.length === 11 && digits.startsWith("1")) {
-    digits = digits.substring(1);
+    return digits.substring(1);
   }
+  
   return digits;
 }
 
