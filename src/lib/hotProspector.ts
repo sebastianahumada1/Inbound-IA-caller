@@ -68,10 +68,10 @@ export type HotProspectorSearchResult = {
 function digitsOnly(phone: string): string {
   let digits = phone.replace(/\D/g, "");
   
-  // If we have a full E.164 (like 13008669878), we need to decide 
-  // if we strip the country code "1" to match HP's 10-digit format.
-  if (digits.length === 11 && digits.startsWith("1")) {
-    return digits.substring(1);
+  // Always take the last 10 digits to ensure we match HP's format
+  // regardless of whether a country code (like +1) was provided.
+  if (digits.length >= 10) {
+    return digits.slice(-10);
   }
   
   return digits;
