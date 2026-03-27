@@ -5,6 +5,7 @@ import { Logger } from './utils/logger.js';
 import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
+import { ClientConfigManager } from './utils/client-config.js';
 import {
   VapiWebhookBodySchema,
   VapiWebhookBody,
@@ -17,6 +18,7 @@ import {
   CheckCalendarAvailabilityArgsSchema,
   ScheduleAppointmentArgsSchema,
   LookupCallerArgsSchema,
+  SearchContactArgsSchema,
   ToolResult,
   WebhookResponse,
 } from './schemas.js';
@@ -295,6 +297,9 @@ export class VapiWebhookHandler {
 
         case 'lookup_caller':
           return await this.handleLookupCaller(id, args, callId);
+
+        case 'search_contact':
+          return await this.handleSearchContact(id, args, callId);
         
         default:
           Logger.warn('Unknown tool name', { id, name });
@@ -550,6 +555,95 @@ export class VapiWebhookHandler {
         ok: false,
         error: `Lookup failed: ${errorMessage}`,
       };
+    }
+  }
+
+  // ── GHL Contact Search Tool ─────────────────────────────────────────
+  private async handleSearchContact(id: string, args: any, callId?: string): Promise<ToolResult> {
+    try {
+      const validatedArgs = SearchContactArgsSchema.parse(args);
+      const { query } = validatedArgs;
+
+      Logger.info('[SEARCH_CONTACT] Searching contact in GHL', {
+        toolCallId: id,
+        callId,
+        query,
+      });
+
+      const apiKey = process.env.GHL_API_KEY;
+      const locationId = process.env.GHL_LOCATION_ID;
+
+      if (!apiKey) {
+        Logger.error('[SEARCH_CONTACT] No GHL API key available');
+        return { id, ok: false, error: 'GHL API key not configured' };
+      }
+
+      if (!locationId) {
+        Logger.error('[SEARCH_CONTACT] No GHL Location ID available');
+        return { id, ok: false, error: 'GHL Location ID not configured' };
+      }
+
+      const url = `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${encodeURIComponent(query)}`;
+      const resp = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Version': '2021-07-28',
+        },
+      });
+
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        Logger.error('[SEARCH_CONTACT] GHL API error', { status: resp.status, data });
+        return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+      }
+
+      const contact = (data as any).contacts?.[0];
+
+      if (!contact) {
+        Logger.info('[SEARCH_CONTACT] No contact found', { callId, query });
+        return {
+          id,
+          ok: true,
+          data: {
+            found: false,
+            query,
+            message: `No contact found for: ${query}`,
+          },
+        };
+      }
+
+      Logger.info('[SEARCH_CONTACT] Contact found', {
+        callId,
+        contactId: contact.id,
+        name: contact.firstName,
+      });
+
+      return {
+        id,
+        ok: true,
+        data: {
+          found: true,
+          contactId: contact.id,
+          firstName: contact.firstName ?? '',
+          lastName: contact.lastName ?? '',
+          name: `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+          email: contact.email ?? '',
+          phone: contact.phone ?? '',
+        },
+      };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        Logger.error('[SEARCH_CONTACT] Invalid arguments', { id, errors: error.issues });
+        return {
+          id,
+          ok: false,
+          error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+        };
+      }
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[SEARCH_CONTACT] Error during search', { id, callId, error: errorMessage });
+      return { id, ok: false, error: `Search failed: ${errorMessage}` };
     }
   }
 
