@@ -94,271 +94,6 @@ export class GHLConnector {
     return null;
   }
 
-  /**
-   * Extract time mentioned by user from transcript
-   * Looks for patterns like "9 AM", "3 PM", "2:30 PM", etc.
-   */
-  private extractTimeFromTranscript(transcript: string): { hour: number; minute: number; period: 'AM' | 'PM' | null } | null {
-    if (!transcript) return null;
-    
-    // Try HH:MM AM/PM first (most specific), then H AM/PM / H o'clock
-    const withMinutes = /(\d{1,2}):(\d{2})\s*(AM|PM)/i;
-    const withoutMinutes = /(\d{1,2})\s*(?:o'?clock)?\s*(AM|PM)/i;
-
-    const mMin = transcript.match(withMinutes);
-    if (mMin && mMin[1] && mMin[2] && mMin[3]) {
-      const hour = parseInt(mMin[1], 10);
-      const minute = parseInt(mMin[2], 10);
-      const period = mMin[3].toUpperCase() as 'AM' | 'PM';
-      let hour24 = hour;
-      if (period === 'PM' && hour !== 12) hour24 = hour + 12;
-      else if (period === 'AM' && hour === 12) hour24 = 0;
-
-      Logger.info('[TRANSCRIPT_TIME] Extracted time from transcript', {
-        transcript: transcript.substring(0, 200),
-        extracted: { hour, minute, period, hour24 },
-      });
-      return { hour: hour24, minute, period };
-    }
-
-    const mSimple = transcript.match(withoutMinutes);
-    if (mSimple && mSimple[1] && mSimple[2]) {
-      const hour = parseInt(mSimple[1], 10);
-      const period = mSimple[2].toUpperCase() as 'AM' | 'PM';
-      let hour24 = hour;
-      if (period === 'PM' && hour !== 12) hour24 = hour + 12;
-      else if (period === 'AM' && hour === 12) hour24 = 0;
-
-      Logger.info('[TRANSCRIPT_TIME] Extracted time from transcript', {
-        transcript: transcript.substring(0, 200),
-        extracted: { hour, minute: 0, period, hour24 },
-      });
-      return { hour: hour24, minute: 0, period };
-    }
-    
-    return null;
-  }
-
-  /**
-   * Validate and correct appointment time using transcript if available
-   * Ensures the time matches what the user actually said
-   */
-  private async correctAppointmentTimeWithTranscript(
-    dateTimeString: string,
-    callId: string | undefined,
-    stateStorage: any
-  ): Promise<string> {
-    // If no callId, use regular correction
-    if (!callId || !stateStorage) {
-      return this.correctAppointmentTime(dateTimeString);
-    }
-    
-    try {
-      // Get transcript from storage
-      const transcript = await stateStorage.getTranscript(callId);
-      
-      if (transcript) {
-        // Extract time from transcript
-        const transcriptTime = this.extractTimeFromTranscript(transcript);
-        
-        if (transcriptTime) {
-          // Parse the datetime from AI
-          const aiDate = new Date(dateTimeString);
-          const isUTC = dateTimeString.endsWith('Z');
-          
-          // Get timezone from original or use client's default
-          let timezone = '-05:00'; // Default to EST
-          const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
-          if (timezoneMatch && timezoneMatch[1]) {
-            timezone = timezoneMatch[1];
-          } else if (this.assistantId) {
-            // Try to get timezone from client config (if we add it later)
-            // For now, use default based on common timezones
-            const clientName = ClientConfigManager.getClientName(this.assistantId);
-            if (clientName.includes('Texas') || clientName.includes('West Texas')) {
-              timezone = '-06:00'; // Central Time
-            }
-          }
-          
-          // If AI sent UTC, we need to check if it matches transcript when converted to local time
-          let aiHourLocal = aiDate.getHours();
-          if (isUTC) {
-            // Convert UTC to local timezone for comparison
-            // Parse the date as if it were in the client's timezone
-            const localDateStr = dateTimeString.replace('Z', timezone);
-            const localDate = new Date(localDateStr);
-            aiHourLocal = localDate.getHours();
-          }
-          
-          // Compare with transcript time
-          if (aiHourLocal !== transcriptTime.hour) {
-            Logger.warn('[TRANSCRIPT_VALIDATION] Time mismatch detected', {
-              transcriptTime: transcriptTime.hour,
-              aiTimeUTC: isUTC ? aiDate.getHours() : undefined,
-              aiTimeLocal: aiHourLocal,
-              dateTimeString,
-              isUTC,
-            });
-            
-            // Correct the time to match transcript
-            // Use the date from AI but set the hour/minute from transcript
-            const correctedDate = new Date(aiDate);
-            correctedDate.setHours(transcriptTime.hour, transcriptTime.minute, 0, 0);
-            
-            // Reconstruct datetime string with client's timezone
-            const year = correctedDate.getFullYear();
-            const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
-            const day = String(correctedDate.getDate()).padStart(2, '0');
-            const correctedHourStr = String(correctedDate.getHours()).padStart(2, '0');
-            const correctedMinStr = String(correctedDate.getMinutes()).padStart(2, '0');
-            const correctedSecStr = String(correctedDate.getSeconds()).padStart(2, '0');
-            
-            const corrected = `${year}-${month}-${day}T${correctedHourStr}:${correctedMinStr}:${correctedSecStr}${timezone}`;
-            
-            Logger.info('[TRANSCRIPT_VALIDATION] Corrected time based on transcript', {
-              original: dateTimeString,
-              corrected,
-              transcriptTime: transcriptTime.hour,
-              aiTimeLocal: aiHourLocal,
-              timezone,
-            });
-            
-            return corrected;
-          } else {
-            // Time matches, but if it was in UTC, convert to client timezone
-            if (isUTC) {
-              const year = aiDate.getFullYear();
-              const month = String(aiDate.getMonth() + 1).padStart(2, '0');
-              const day = String(aiDate.getDate()).padStart(2, '0');
-              const hourStr = String(transcriptTime.hour).padStart(2, '0');
-              const minStr = String(transcriptTime.minute).padStart(2, '0');
-              
-              const converted = `${year}-${month}-${day}T${hourStr}:${minStr}:00${timezone}`;
-              
-              Logger.info('[TRANSCRIPT_VALIDATION] Converted UTC to client timezone', {
-                original: dateTimeString,
-                converted,
-                timezone,
-              });
-              
-              return converted;
-            }
-            
-            Logger.info('[TRANSCRIPT_VALIDATION] Time matches transcript', {
-              dateTimeString,
-              transcriptTime: transcriptTime.hour,
-              aiTimeLocal: aiHourLocal,
-            });
-          }
-        }
-      }
-    } catch (error) {
-      Logger.warn('[TRANSCRIPT_VALIDATION] Error using transcript, falling back to regular correction', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-    
-    // Fallback to regular correction
-    return this.correctAppointmentTime(dateTimeString);
-  }
-
-  /**
-   * Validate and correct appointment time to ensure it matches user's requested time
-   * Detects common AI timezone conversion errors and corrects them
-   * Business hours: 8 AM - 7 PM (08:00 - 19:00)
-   */
-  private correctAppointmentTime(dateTimeString: string): string {
-    try {
-      // Parse the datetime
-      const date = new Date(dateTimeString);
-      if (isNaN(date.getTime())) {
-        Logger.warn('[TIME_VALIDATION] Invalid date format, using as-is', { dateTimeString });
-        return dateTimeString;
-      }
-
-      const hour = date.getHours();
-      const minutes = date.getMinutes();
-      
-      // Extract timezone from original string
-      const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
-      const timezone = timezoneMatch ? timezoneMatch[1] : '-05:00';
-      
-      // Business hours validation: 8 AM - 7 PM (08:00 - 19:00)
-      // If hour is outside business hours, it's likely a conversion error
-      const isOutsideBusinessHours = hour < 8 || hour >= 20;
-      
-      if (isOutsideBusinessHours) {
-        Logger.warn('[TIME_VALIDATION] Time outside business hours, attempting correction', {
-          original: dateTimeString,
-          hour,
-          minutes,
-          isBeforeBusinessHours: hour < 8,
-          isAfterBusinessHours: hour >= 20,
-        });
-        
-        // Try multiple correction strategies
-        const correctionStrategies = [
-          { hours: -6, description: '6 hours (common CST/EST error)' },
-          { hours: -12, description: '12 hours (AM/PM confusion)' },
-          { hours: 6, description: '+6 hours (reverse error)' },
-          { hours: 12, description: '+12 hours (reverse AM/PM)' },
-        ];
-        
-        for (const strategy of correctionStrategies) {
-          const correctedDate = new Date(date.getTime() + strategy.hours * 60 * 60 * 1000);
-          const correctedHour = correctedDate.getHours();
-          
-          // Check if corrected hour is in business hours
-          if (correctedHour >= 8 && correctedHour <= 19) {
-            // Reconstruct datetime string with corrected time
-            const year = correctedDate.getFullYear();
-            const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
-            const day = String(correctedDate.getDate()).padStart(2, '0');
-            const correctedHourStr = String(correctedHour).padStart(2, '0');
-            const correctedMinStr = String(correctedDate.getMinutes()).padStart(2, '0');
-            const correctedSecStr = String(correctedDate.getSeconds()).padStart(2, '0');
-            
-            const corrected = `${year}-${month}-${day}T${correctedHourStr}:${correctedMinStr}:${correctedSecStr}${timezone}`;
-            
-            Logger.info('[TIME_VALIDATION] Corrected appointment time', {
-              original: dateTimeString,
-              corrected,
-              originalHour: hour,
-              correctedHour: correctedHour,
-              strategy: strategy.description,
-              correctionHours: strategy.hours,
-            });
-            
-            return corrected;
-          }
-        }
-        
-        // If no correction worked, log warning but return original
-        Logger.warn('[TIME_VALIDATION] Could not find valid correction, using original', {
-          original: dateTimeString,
-          hour,
-          minutes,
-        });
-      } else {
-        // Hour is in business hours, validate it's reasonable
-        Logger.debug('[TIME_VALIDATION] Time is within business hours', {
-          dateTimeString,
-          hour,
-          minutes,
-        });
-      }
-      
-      // Return original if already valid or if correction failed
-      return dateTimeString;
-    } catch (error) {
-      Logger.warn('[TIME_VALIDATION] Error validating time, using as-is', {
-        dateTimeString,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return dateTimeString;
-    }
-  }
-
   async sendSms(id: string, args: SendSmsArgs): Promise<ToolResult> {
     try {
       Logger.info('Processing send_sms tool call', { id, args });
@@ -711,7 +446,7 @@ export class GHLConnector {
     }
   }
 
-  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, callId?: string, stateStorage?: any): Promise<ToolResult> {
+  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any): Promise<ToolResult> {
     try {
       Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args });
 
@@ -737,22 +472,16 @@ export class GHLConnector {
         };
       }
 
-      // Correct common AI timezone conversion errors before checking
-      // Use transcript validation if available to ensure time matches what user said
-      const correctedDateTime = await this.correctAppointmentTimeWithTranscript(
-        args.dateTime,
-        callId,
-        stateStorage
-      );
-      
-      Logger.info('[CALENDAR] DateTime correction applied', {
+      // Trust the AI's dateTime as-is — transcript correction was overwriting
+      // legitimate slot queries (e.g. checking 3 PM when user said "11 AM")
+      const correctedDateTime = args.dateTime;
+
+      Logger.info('[CALENDAR] Using dateTime as provided by AI', {
         id,
-        original: args.dateTime,
-        corrected: correctedDateTime,
-        wasCorrected: args.dateTime !== correctedDateTime,
+        dateTime: correctedDateTime,
       });
       
-      // Parse the requested dateTime (using corrected version)
+      // Parse the requested dateTime
       const requestedDate = new Date(correctedDateTime);
       if (isNaN(requestedDate.getTime())) {
         const error = 'Invalid dateTime format';
@@ -899,7 +628,7 @@ export class GHLConnector {
     }
   }
 
-  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, callId?: string, stateStorage?: any): Promise<ToolResult> {
+  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any): Promise<ToolResult> {
     try {
       Logger.info('[CALENDAR] Processing schedule_appointment', { 
         id, 
@@ -1004,45 +733,15 @@ export class GHLConnector {
         }
       }
 
-      // Only correct startTime with the transcript — endTime is always
-      // startTime + duration, so forcing it to match the spoken hour
-      // would make endTime == startTime and fail validation.
-      const correctedStartTime = await this.correctAppointmentTimeWithTranscript(
-        args.startTime,
-        callId,
-        stateStorage
-      );
+      // Trust the AI's startTime/endTime as-is — transcript correction was
+      // corrupting times by forcing every datetime to match the spoken hour
+      const correctedStartTime = args.startTime;
+      const correctedEndTime = args.endTime;
 
-      // Derive endTime: keep the original duration the AI calculated,
-      // but rebase it on the (possibly corrected) startTime.
-      const origStart = new Date(args.startTime);
-      const origEnd   = new Date(args.endTime);
-      const durationMs = origEnd.getTime() - origStart.getTime();
-      const correctedStartDate = new Date(correctedStartTime);
-      const correctedEndDate   = new Date(correctedStartDate.getTime() + (durationMs > 0 ? durationMs : 30 * 60 * 1000));
-
-      // Rebuild endTime string preserving the timezone from startTime
-      const tzMatch = correctedStartTime.match(/([+-]\d{2}:\d{2})$/);
-      const tz = tzMatch ? tzMatch[1] : '-04:00';
-      const correctedEndTime = [
-        correctedEndDate.getFullYear(),
-        '-', String(correctedEndDate.getMonth() + 1).padStart(2, '0'),
-        '-', String(correctedEndDate.getDate()).padStart(2, '0'),
-        'T', String(correctedEndDate.getHours()).padStart(2, '0'),
-        ':', String(correctedEndDate.getMinutes()).padStart(2, '0'),
-        ':', String(correctedEndDate.getSeconds()).padStart(2, '0'),
-        tz,
-      ].join('');
-
-      Logger.info('[CALENDAR] Time correction applied for validation', {
+      Logger.info('[CALENDAR] Using startTime/endTime as provided by AI', {
         id,
-        originalStartTime: args.startTime,
-        correctedStartTime,
-        originalEndTime: args.endTime,
-        correctedEndTime,
-        durationMs,
-        startTimeWasCorrected: args.startTime !== correctedStartTime,
-        endTimeWasCorrected: args.endTime !== correctedEndTime,
+        startTime: correctedStartTime,
+        endTime: correctedEndTime,
       });
       
       // Validate date formats (using corrected times)
