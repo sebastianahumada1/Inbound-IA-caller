@@ -101,38 +101,39 @@ export class GHLConnector {
   private extractTimeFromTranscript(transcript: string): { hour: number; minute: number; period: 'AM' | 'PM' | null } | null {
     if (!transcript) return null;
     
-    // Patterns to match:
-    // - "9 AM", "9am", "9:00 AM"
-    // - "3 PM", "3pm", "3:30 PM"
-    // - "2 o'clock", "2:00"
-    const patterns = [
-      /(\d{1,2})\s*(?:o'?clock|:00)?\s*(AM|PM|am|pm)/i,
-      /(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/i,
-      /(\d{1,2})\s*(AM|PM|am|pm)/i,
-    ];
-    
-    for (const pattern of patterns) {
-      const match = transcript.match(pattern);
-      if (match && match[1]) {
-        const hour = parseInt(match[1], 10);
-        const minute = match[2] ? parseInt(match[2], 10) : 0;
-        const period = (match[3] || match[2])?.toUpperCase() as 'AM' | 'PM' | null;
-        
-        // Convert to 24-hour format
-        let hour24 = hour;
-        if (period === 'PM' && hour !== 12) {
-          hour24 = hour + 12;
-        } else if (period === 'AM' && hour === 12) {
-          hour24 = 0;
-        }
-        
-        Logger.info('[TRANSCRIPT_TIME] Extracted time from transcript', {
-          transcript: transcript.substring(0, 200),
-          extracted: { hour, minute, period, hour24 },
-        });
-        
-        return { hour: hour24, minute, period };
-      }
+    // Try HH:MM AM/PM first (most specific), then H AM/PM / H o'clock
+    const withMinutes = /(\d{1,2}):(\d{2})\s*(AM|PM)/i;
+    const withoutMinutes = /(\d{1,2})\s*(?:o'?clock)?\s*(AM|PM)/i;
+
+    const mMin = transcript.match(withMinutes);
+    if (mMin && mMin[1] && mMin[2] && mMin[3]) {
+      const hour = parseInt(mMin[1], 10);
+      const minute = parseInt(mMin[2], 10);
+      const period = mMin[3].toUpperCase() as 'AM' | 'PM';
+      let hour24 = hour;
+      if (period === 'PM' && hour !== 12) hour24 = hour + 12;
+      else if (period === 'AM' && hour === 12) hour24 = 0;
+
+      Logger.info('[TRANSCRIPT_TIME] Extracted time from transcript', {
+        transcript: transcript.substring(0, 200),
+        extracted: { hour, minute, period, hour24 },
+      });
+      return { hour: hour24, minute, period };
+    }
+
+    const mSimple = transcript.match(withoutMinutes);
+    if (mSimple && mSimple[1] && mSimple[2]) {
+      const hour = parseInt(mSimple[1], 10);
+      const period = mSimple[2].toUpperCase() as 'AM' | 'PM';
+      let hour24 = hour;
+      if (period === 'PM' && hour !== 12) hour24 = hour + 12;
+      else if (period === 'AM' && hour === 12) hour24 = 0;
+
+      Logger.info('[TRANSCRIPT_TIME] Extracted time from transcript', {
+        transcript: transcript.substring(0, 200),
+        extracted: { hour, minute: 0, period, hour24 },
+      });
+      return { hour: hour24, minute: 0, period };
     }
     
     return null;
