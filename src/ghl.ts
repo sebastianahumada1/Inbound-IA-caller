@@ -1004,25 +1004,43 @@ export class GHLConnector {
         }
       }
 
-      // Correct common AI timezone conversion errors before validating
-      // Use transcript validation if available to ensure time matches what user said
+      // Only correct startTime with the transcript — endTime is always
+      // startTime + duration, so forcing it to match the spoken hour
+      // would make endTime == startTime and fail validation.
       const correctedStartTime = await this.correctAppointmentTimeWithTranscript(
         args.startTime,
         callId,
         stateStorage
       );
-      const correctedEndTime = await this.correctAppointmentTimeWithTranscript(
-        args.endTime,
-        callId,
-        stateStorage
-      );
-      
+
+      // Derive endTime: keep the original duration the AI calculated,
+      // but rebase it on the (possibly corrected) startTime.
+      const origStart = new Date(args.startTime);
+      const origEnd   = new Date(args.endTime);
+      const durationMs = origEnd.getTime() - origStart.getTime();
+      const correctedStartDate = new Date(correctedStartTime);
+      const correctedEndDate   = new Date(correctedStartDate.getTime() + (durationMs > 0 ? durationMs : 30 * 60 * 1000));
+
+      // Rebuild endTime string preserving the timezone from startTime
+      const tzMatch = correctedStartTime.match(/([+-]\d{2}:\d{2})$/);
+      const tz = tzMatch ? tzMatch[1] : '-04:00';
+      const correctedEndTime = [
+        correctedEndDate.getFullYear(),
+        '-', String(correctedEndDate.getMonth() + 1).padStart(2, '0'),
+        '-', String(correctedEndDate.getDate()).padStart(2, '0'),
+        'T', String(correctedEndDate.getHours()).padStart(2, '0'),
+        ':', String(correctedEndDate.getMinutes()).padStart(2, '0'),
+        ':', String(correctedEndDate.getSeconds()).padStart(2, '0'),
+        tz,
+      ].join('');
+
       Logger.info('[CALENDAR] Time correction applied for validation', {
         id,
         originalStartTime: args.startTime,
         correctedStartTime,
         originalEndTime: args.endTime,
         correctedEndTime,
+        durationMs,
         startTimeWasCorrected: args.startTime !== correctedStartTime,
         endTimeWasCorrected: args.endTime !== correctedEndTime,
       });
