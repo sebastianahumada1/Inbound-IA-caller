@@ -5,6 +5,7 @@ import { Logger } from './utils/logger.js';
 import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
+import { ClientConfigManager } from './utils/client-config.js';
 import {
   VapiWebhookBodySchema,
   VapiWebhookBody,
@@ -238,7 +239,7 @@ export class VapiWebhookHandler {
 
     // Process tool calls sequentially to avoid overwhelming GHL
     for (const toolCall of toolCallList) {
-      const result = await this.dispatchToolCall(toolCall, ghlMetadata, callId);
+      const result = await this.dispatchToolCall(toolCall, ghlMetadata, callId, assistantId);
       
       // Convert to Vapi format: toolCallId and result (as string)
       let resultString: string;
@@ -266,7 +267,7 @@ export class VapiWebhookHandler {
     };
   }
 
-  private async dispatchToolCall(toolCall: VapiToolCall, ghlMetadata?: any, callId?: string): Promise<ToolResult> {
+  private async dispatchToolCall(toolCall: VapiToolCall, ghlMetadata?: any, callId?: string, assistantId?: string): Promise<ToolResult> {
     const { id, name, arguments: args } = toolCall;
     
     Logger.info('Dispatching tool call', { id, name, callId, args, hasGhlMetadata: !!ghlMetadata });
@@ -299,7 +300,7 @@ export class VapiWebhookHandler {
 
         case 'search_contact':
         case 'premier_inbound_contactid':
-          return await this.handleSearchContact(id, args, callId);
+          return await this.handleSearchContact(id, args, callId, assistantId);
         
         default:
           Logger.warn('Unknown tool name', { id, name });
@@ -559,7 +560,7 @@ export class VapiWebhookHandler {
   }
 
   // ── GHL Contact Search Tool ─────────────────────────────────────────
-  private async handleSearchContact(id: string, args: any, callId?: string): Promise<ToolResult> {
+  private async handleSearchContact(id: string, args: any, callId?: string, assistantId?: string): Promise<ToolResult> {
     try {
       const validatedArgs = SearchContactArgsSchema.parse(args);
       const { query } = validatedArgs;
@@ -567,11 +568,22 @@ export class VapiWebhookHandler {
       Logger.info('[SEARCH_CONTACT] Searching contact in GHL', {
         toolCallId: id,
         callId,
+        assistantId,
         query,
       });
 
-      const apiKey = process.env.GHL_API_KEY;
-      const locationId = process.env.GHL_LOCATION_ID;
+      // Resolve credentials: client-specific first, then env fallback
+      const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId))
+        || process.env.GHL_API_KEY;
+      const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId))
+        || process.env.GHL_LOCATION_ID;
+
+      Logger.info('[SEARCH_CONTACT] Resolved credentials', {
+        callId,
+        source: assistantId && ClientConfigManager.isConfigured(assistantId) ? 'client-config' : 'env',
+        hasApiKey: !!apiKey,
+        hasLocationId: !!locationId,
+      });
 
       if (!apiKey) {
         Logger.error('[SEARCH_CONTACT] No GHL API key available');
