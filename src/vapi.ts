@@ -5,7 +5,6 @@ import { Logger } from './utils/logger.js';
 import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
-import { ClientConfigManager } from './utils/client-config.js';
 import {
   VapiWebhookBodySchema,
   VapiWebhookBody,
