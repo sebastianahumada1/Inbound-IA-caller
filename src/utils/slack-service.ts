@@ -178,8 +178,10 @@ export class SlackService {
         || fullCallData?.metadata?.ghl?.contactId
         || null;
       
-      // Get locationId from client config
-      const locationId = assistantId ? ClientConfigManager.getLocationId(assistantId) : null;
+      // Get locationId from client config or ghlMetadata (HotProspector provides it)
+      const locationId = (assistantId ? ClientConfigManager.getLocationId(assistantId) : null)
+        || ghlMetadata?.locationId
+        || null;
       
       // Build GHL contact link if we have both contactId and locationId
       const ghlContactLink = (contactId && locationId) 

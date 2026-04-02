@@ -537,6 +537,19 @@ export class VapiWebhookHandler {
         fieldCount: Object.keys(leadData).length,
       });
 
+      // Persist lead info so end-of-call-report can use it for Slack notification
+      if (callId) {
+        const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+        await this.stateStorage.storeCallMetadata(callId, {
+          ...existing,
+          firstName: lead.Firstname ?? '',
+          lastName: lead.Lastname ?? '',
+          email: lead['E-Mail'] ?? '',
+          phone: fullPhone,
+          locationId: lead.LocationId ?? '',
+        });
+      }
+
       return {
         id,
         ok: true,
@@ -632,6 +645,19 @@ export class VapiWebhookHandler {
         contactId: contact.id,
         name: contact.firstName,
       });
+
+      // Persist contactId so end-of-call-report can build the GHL link
+      if (callId) {
+        const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+        await this.stateStorage.storeCallMetadata(callId, {
+          ...existing,
+          contactId: contact.id,
+          firstName: existing.firstName || contact.firstName || '',
+          lastName: existing.lastName || contact.lastName || '',
+          email: existing.email || contact.email || '',
+          phone: existing.phone || contact.phone || '',
+        });
+      }
 
       return {
         id,
@@ -767,7 +793,37 @@ export class VapiWebhookHandler {
           }
         }
 
-        // If still no GHL metadata, try looking up the caller's phone in GHL
+        // If still no GHL metadata, check stateStorage for data captured during tool calls
+        if (!ghlMetadata) {
+          try {
+            const storedMetadata = await this.stateStorage.getCallMetadata(message.call.id);
+            if (storedMetadata?.contactId || storedMetadata?.firstName) {
+              ghlMetadata = {
+                contactId: storedMetadata.contactId || null,
+                locationId: storedMetadata.locationId || null,
+                contact: {
+                  firstName: storedMetadata.firstName || '',
+                  lastName: storedMetadata.lastName || '',
+                  name: `${storedMetadata.firstName || ''} ${storedMetadata.lastName || ''}`.trim(),
+                  email: storedMetadata.email || '',
+                  phone: storedMetadata.phone || '',
+                },
+              };
+              Logger.info('[END_OF_CALL] Built ghlMetadata from stateStorage tool call data', {
+                callId: message.call.id,
+                contactId: ghlMetadata.contactId,
+                firstName: storedMetadata.firstName,
+              });
+            }
+          } catch (error) {
+            Logger.warn('[END_OF_CALL] Could not read stateStorage metadata', {
+              callId: message.call.id,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
+
+        // Last resort: look up caller phone directly in GHL
         if (!ghlMetadata) {
           const callerPhone = message.call?.customer?.number;
           if (callerPhone) {
