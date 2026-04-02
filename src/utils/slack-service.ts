@@ -227,11 +227,13 @@ export class SlackService {
       const seconds = String(now.getSeconds()).padStart(2, '0');
       const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
       
+      // Build full name
+      const fullName = [leadFirstName, leadLastName].filter(n => n && n !== 'N/A').join(' ') || 'N/A';
+
       // Build the message with exact format requested
       let message = `<!channel> New Call Recording & Report Just Dropped\n\n`;
       message += `*Practice Name:* ${clientName}\n`;
-      message += `*Lead Name:* ${leadFirstName}\n`;
-      message += `*Last Name:* ${leadLastName}\n`;
+      message += `*Name:* ${fullName}\n`;
       message += `*Email:* ${leadEmail}\n`;
       message += `*Phone:* ${leadPhone}\n`;
       message += `*GHL Contact:* ${ghlContactLink}\n`;
