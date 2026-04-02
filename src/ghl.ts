@@ -73,6 +73,72 @@ export class GHLConnector {
   }
 
   /**
+   * Lookup a GHL contact by phone number.
+   * Returns a ghlMetadata-shaped object or null if not found.
+   */
+  async lookupContactByPhone(phone: string): Promise<{ contactId: string; contact: any } | null> {
+    const ghlApiKey = this.getGHLApiKey();
+    if (!ghlApiKey) {
+      Logger.warn('[GHL_CONNECTOR] Cannot lookup contact - no API key');
+      return null;
+    }
+
+    const trySearch = async (phoneParam: string) => {
+      const response = await this.httpClient.get(
+        `https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(phoneParam)}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${ghlApiKey}`,
+            'Content-Type': 'application/json',
+            'Version': '2021-07-28',
+          },
+        }
+      );
+      if (response.ok) {
+        return response.data?.contacts || response.data?.data?.contacts || [];
+      }
+      return [];
+    };
+
+    try {
+      let contacts = await trySearch(phone);
+      if (contacts.length === 0 && phone.startsWith('+')) {
+        contacts = await trySearch(phone.substring(1));
+      }
+
+      if (contacts.length === 0) {
+        Logger.warn('[GHL_CONNECTOR] No contact found by phone', { phone: '***' + phone.slice(-4) });
+        return null;
+      }
+
+      const contact = contacts[0];
+      Logger.info('[GHL_CONNECTOR] Contact found by phone lookup', {
+        contactId: contact.id,
+        phone: '***' + phone.slice(-4),
+      });
+
+      return {
+        contactId: contact.id,
+        contact: {
+          id: contact.id,
+          firstName: contact.firstName || '',
+          lastName: contact.lastName || '',
+          name: contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
+          email: contact.email || '',
+          phone: contact.phone || contact.phoneNumber || phone,
+          phoneNumber: contact.phoneNumber || contact.phone || phone,
+        },
+      };
+    } catch (error) {
+      Logger.error('[GHL_CONNECTOR] Phone lookup failed', {
+        phone: '***' + phone.slice(-4),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return null;
+    }
+  }
+
+  /**
    * Get the Calendar ID based on Assistant ID
    */
   private getCalendarId(): string | null {

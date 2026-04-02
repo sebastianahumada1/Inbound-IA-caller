@@ -749,7 +749,7 @@ export class VapiWebhookHandler {
             const metadataResult = await this.pullCallMetadata(message.call.id);
             ghlMetadata = metadataResult.ghlMetadata;
             fullCallData = metadataResult.fullCall || fullCallData;
-            
+
             Logger.info('[END_OF_CALL] DEBUG - Metadata fetched from API', {
               callId: message.call.id,
               hasGhlMetadata: !!ghlMetadata,
@@ -764,6 +764,32 @@ export class VapiWebhookHandler {
               callId: message.call.id,
               error: error instanceof Error ? error.message : 'Unknown error',
             });
+          }
+        }
+
+        // If still no GHL metadata, try looking up the caller's phone in GHL
+        if (!ghlMetadata) {
+          const callerPhone = message.call?.customer?.number;
+          if (callerPhone) {
+            try {
+              Logger.info('[END_OF_CALL] Looking up caller by phone in GHL', {
+                callId: message.call.id,
+                phone: '***' + callerPhone.slice(-4),
+              });
+              const contactResult = await this.ghlConnector.lookupContactByPhone(callerPhone);
+              if (contactResult) {
+                ghlMetadata = contactResult;
+                Logger.info('[END_OF_CALL] GHL contact found via phone lookup', {
+                  callId: message.call.id,
+                  contactId: contactResult.contactId,
+                });
+              }
+            } catch (error) {
+              Logger.warn('[END_OF_CALL] GHL phone lookup failed', {
+                callId: message.call.id,
+                error: error instanceof Error ? error.message : 'Unknown error',
+              });
+            }
           }
         }
         
