@@ -863,6 +863,24 @@ export class VapiWebhookHandler {
           }
         );
         Logger.info('[END_OF_CALL] Recording uploaded to Slack successfully', { callId: message.call.id });
+
+        // Send summary note to GHL contact if we have a contactId
+        const contactId = ghlMetadata?.contactId || ghlMetadata?.contact?.id;
+        if (contactId) {
+          try {
+            // Store summary so sendFinalSummaryNote can read it
+            if (message.analysis?.summary) {
+              await this.stateStorage.storeCallSummary(message.call.id, message.analysis.summary);
+            }
+            await this.sendFinalSummaryNote(message.call.id, { contactId, metadata: ghlMetadata });
+            Logger.info('[END_OF_CALL] Summary note sent to GHL', { callId: message.call.id, contactId });
+          } catch (error) {
+            Logger.error('[END_OF_CALL] Failed to send summary note', {
+              callId: message.call.id,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
       } catch (error) {
         Logger.error('[SLACK_UPLOAD] Failed to upload recording', {
           callId: message.call.id,
