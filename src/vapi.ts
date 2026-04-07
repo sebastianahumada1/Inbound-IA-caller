@@ -302,6 +302,7 @@ export class VapiWebhookHandler {
 
         case 'search_contact':
         case 'premier_inbound_contactid':
+        case 'inbound_contactid':
           return await this.handleSearchContact(id, args, callId, assistantId);
         
         default:
