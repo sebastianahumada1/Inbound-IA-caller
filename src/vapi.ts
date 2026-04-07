@@ -711,7 +711,12 @@ export class VapiWebhookHandler {
   private async handleEndOfCallReport(message: any): Promise<WebhookResponse> {
     const recordingUrl = message.call?.recordingUrl || message.recordingUrl;
     const assistantId = message.call?.assistantId;
-    
+    // Support both legacy summaryPlan and new structured output ("Call Summary" schema)
+    const callSummary: string | undefined =
+      message.analysis?.summary ||
+      message.analysis?.['Call Summary'] ||
+      undefined;
+
     Logger.info('End of call report received', {
       callId: message.call?.id,
       assistantId,
@@ -733,14 +738,14 @@ export class VapiWebhookHandler {
     }
 
     // Store the summary from end-of-call-report if available
-    if (message.call?.id && message.analysis?.summary) {
+    if (message.call?.id && callSummary) {
       await this.stateStorage.storeCallSummary(
-        message.call.id, 
-        message.analysis.summary
+        message.call.id,
+        callSummary
       );
       Logger.info('[END_OF_CALL] Summary stored in persistent storage', {
         callId: message.call.id,
-        summaryLength: message.analysis.summary.length,
+        summaryLength: callSummary.length,
       });
     }
 
@@ -859,7 +864,7 @@ export class VapiWebhookHandler {
           {
             duration: message.duration,
             cost: message.cost,
-            summary: message.analysis?.summary,
+            summary: callSummary,
             sentiment: message.analysis?.sentiment,
           }
         );
@@ -870,8 +875,8 @@ export class VapiWebhookHandler {
         if (contactId) {
           try {
             // Store summary so sendFinalSummaryNote can read it
-            if (message.analysis?.summary) {
-              await this.stateStorage.storeCallSummary(message.call.id, message.analysis.summary);
+            if (callSummary) {
+              await this.stateStorage.storeCallSummary(message.call.id, callSummary);
             }
             await this.sendFinalSummaryNote(message.call.id, { contactId, metadata: ghlMetadata });
             Logger.info('[END_OF_CALL] Summary note sent to GHL', { callId: message.call.id, contactId });
