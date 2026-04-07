@@ -712,7 +712,8 @@ export class VapiWebhookHandler {
     const recordingUrl = message.call?.recordingUrl || message.recordingUrl;
     const assistantId = message.call?.assistantId;
     // Support both legacy summaryPlan and new structured output ("Call Summary" schema)
-    const callSummary: string | undefined =
+    // Note: structured outputs are NOT in the webhook — they are fetched from the VAPI API below
+    let callSummary: string | undefined =
       message.analysis?.summary ||
       message.analysis?.['Call Summary'] ||
       undefined;
@@ -774,25 +775,54 @@ export class VapiWebhookHandler {
           hasGhlInMessage: !!ghlMetadata,
         });
         
-        // If not available in webhook, try pulling from API
+        // Always pull from API to get structured outputs (summary); also get GHL metadata if missing
+        let apiFetched = false;
         if (!ghlMetadata) {
           try {
             Logger.info('[END_OF_CALL] Pulling metadata from API', { callId: message.call.id });
             const metadataResult = await this.pullCallMetadata(message.call.id);
             ghlMetadata = metadataResult.ghlMetadata;
             fullCallData = metadataResult.fullCall || fullCallData;
+            apiFetched = true;
+
+            // Use structured output summary if no summary from webhook
+            if (!callSummary && metadataResult.structuredSummary) {
+              callSummary = metadataResult.structuredSummary;
+              Logger.info('[END_OF_CALL] Summary from structured outputs', {
+                callId: message.call.id,
+                summaryLength: metadataResult.structuredSummary.length,
+              });
+            }
 
             Logger.info('[END_OF_CALL] DEBUG - Metadata fetched from API', {
               callId: message.call.id,
               hasGhlMetadata: !!ghlMetadata,
               hasFullCallData: !!fullCallData,
+              hasStructuredSummary: !!metadataResult.structuredSummary,
               ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
-              fullCallDataKeys: fullCallData ? Object.keys(fullCallData) : [],
-              fullCallMetadataKeys: fullCallData?.metadata ? Object.keys(fullCallData.metadata) : [],
               rawGhlMetadata: ghlMetadata ? JSON.stringify(ghlMetadata).substring(0, 500) : null,
             });
           } catch (error) {
             Logger.warn('[SLACK_UPLOAD] Could not fetch GHL metadata from API', {
+              callId: message.call.id,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          }
+        }
+
+        // If ghlMetadata came from webhook but no summary yet, fetch API just for structured outputs
+        if (!apiFetched && !callSummary) {
+          try {
+            const metadataResult = await this.pullCallMetadata(message.call.id);
+            if (metadataResult.structuredSummary) {
+              callSummary = metadataResult.structuredSummary;
+              Logger.info('[END_OF_CALL] Summary from structured outputs (secondary fetch)', {
+                callId: message.call.id,
+                summaryLength: metadataResult.structuredSummary.length,
+              });
+            }
+          } catch (error) {
+            Logger.warn('[END_OF_CALL] Could not fetch structured outputs', {
               callId: message.call.id,
               error: error instanceof Error ? error.message : 'Unknown error',
             });
