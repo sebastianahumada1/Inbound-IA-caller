@@ -864,7 +864,7 @@ export class VapiWebhookHandler {
           {
             duration: message.duration,
             cost: message.cost,
-            summary: callSummary,
+            ...(callSummary !== undefined && { summary: callSummary }),
             sentiment: message.analysis?.sentiment,
           }
         );
