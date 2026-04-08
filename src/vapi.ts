@@ -172,6 +172,7 @@ export class VapiWebhookHandler {
         // GHL sends metadata.ghl.contactId when it triggers Vapi
         const ghlMetadata = (message as any).call?.metadata?.ghl || null;
         const callId = (message as any).call?.id;
+        const customerPhone = (message as any).call?.customer?.number || null;
         Logger.info('[VAPI] Extracted GHL metadata for tool-calls', {
           callId,
           hasGhlMetadata: !!ghlMetadata,
@@ -183,7 +184,7 @@ export class VapiWebhookHandler {
           contactPhoneNumber: ghlMetadata?.contact?.phoneNumber,
           fullGhlMetadata: JSON.stringify(ghlMetadata).substring(0, 500),
         });
-        return await this.handleToolCalls(message.toolCallList, assistantId, ghlMetadata, callId);
+        return await this.handleToolCalls(message.toolCallList, assistantId, ghlMetadata, callId, customerPhone);
       
       case 'call.ended':
         return this.handleCallEnded(message);
@@ -222,24 +223,24 @@ export class VapiWebhookHandler {
     }
   }
 
-  private async handleToolCalls(toolCallList: VapiToolCall[], assistantId?: string, ghlMetadata?: any, callId?: string): Promise<any> {
-    Logger.info('Processing tool calls', { 
+  private async handleToolCalls(toolCallList: VapiToolCall[], assistantId?: string, ghlMetadata?: any, callId?: string, customerPhone?: string | null): Promise<any> {
+    Logger.info('Processing tool calls', {
       count: toolCallList.length,
       assistantId,
       callId,
       hasGhlMetadata: !!ghlMetadata,
     });
-    
+
     // Set assistant ID in GHL connector if available
     if (assistantId) {
       this.ghlConnector.setAssistantId(assistantId);
     }
-    
+
     const vapiResults: Array<{ toolCallId: string; result: string }> = [];
 
     // Process tool calls sequentially to avoid overwhelming GHL
     for (const toolCall of toolCallList) {
-      const result = await this.dispatchToolCall(toolCall, ghlMetadata, callId, assistantId);
+      const result = await this.dispatchToolCall(toolCall, ghlMetadata, callId, assistantId, customerPhone);
       
       // Convert to Vapi format: toolCallId and result (as string)
       let resultString: string;
@@ -267,9 +268,9 @@ export class VapiWebhookHandler {
     };
   }
 
-  private async dispatchToolCall(toolCall: VapiToolCall, ghlMetadata?: any, callId?: string, assistantId?: string): Promise<ToolResult> {
+  private async dispatchToolCall(toolCall: VapiToolCall, ghlMetadata?: any, callId?: string, assistantId?: string, customerPhone?: string | null): Promise<ToolResult> {
     const { id, name, arguments: args } = toolCall;
-    
+
     Logger.info('Dispatching tool call', { id, name, callId, args, hasGhlMetadata: !!ghlMetadata });
 
     try {
@@ -298,7 +299,7 @@ export class VapiWebhookHandler {
           return await this.handleScheduleAppointment(id, args, ghlMetadata, callId);
 
         case 'lookup_caller':
-          return await this.handleLookupCaller(id, args, callId);
+          return await this.handleLookupCaller(id, args, callId, customerPhone);
 
         case 'search_contact':
         case 'premier_inbound_contactid':
@@ -444,10 +445,21 @@ export class VapiWebhookHandler {
   }
 
   // ── HotProspector Lookup Tool ──────────────────────────────────────
-  private async handleLookupCaller(id: string, args: any, callId?: string): Promise<ToolResult> {
+  private async handleLookupCaller(id: string, args: any, callId?: string, customerPhone?: string | null): Promise<ToolResult> {
     try {
       const validatedArgs = LookupCallerArgsSchema.parse(args);
-      const phone = validatedArgs.phone;
+      let phone = validatedArgs.phone;
+
+      // If the AI sent an invalid/placeholder phone, fall back to the real caller number
+      const isInvalid = !phone || phone === 'unknown' || phone === 'Unknown' || phone.length < 5;
+      if (isInvalid && customerPhone) {
+        Logger.warn('[LOOKUP_CALLER] AI sent invalid phone, using real caller number', {
+          callId,
+          aiPhone: phone,
+          customerPhone,
+        });
+        phone = customerPhone;
+      }
 
       Logger.info('[LOOKUP_CALLER] Looking up caller in HotProspector', {
         toolCallId: id,
