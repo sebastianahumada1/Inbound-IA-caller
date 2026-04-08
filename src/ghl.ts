@@ -668,6 +668,9 @@ export class GHLConnector {
         freeSlotsCount: freeSlots.length,
       });
 
+      // When unavailable, include the actual available slots for the day so the AI can offer alternatives
+      const availableSlotsForDay = freeSlots.slice(0, 10); // up to 10 slots
+
       return {
         id,
         ok: true,
@@ -675,9 +678,12 @@ export class GHLConnector {
           available: isAvailable,
           requestedTime: requestedDate.toISOString(),
           duration: args.durationMinutes || 30,
-          message: isAvailable 
-            ? 'The requested time slot is available' 
-            : 'The requested time slot is not available',
+          message: isAvailable
+            ? 'The requested time slot is available'
+            : freeSlots.length > 0
+              ? `The requested time slot is not available. Available slots for this day: ${availableSlotsForDay.join(', ')}`
+              : 'The requested time slot is not available and there are no open slots for this day.',
+          ...(isAvailable ? {} : { availableSlots: availableSlotsForDay }),
         },
       };
     } catch (error) {
