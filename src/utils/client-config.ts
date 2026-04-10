@@ -12,6 +12,7 @@ export interface ClientConfig {
   assistantId: string;
   ghlApiKey: string;
   calendarId?: string;
+  callbackCalendarId?: string;
   locationId?: string;
   slackChannelId?: string;
 }
@@ -157,6 +158,15 @@ export class ClientConfigManager {
         locationIdVar: 'RESTORE_INTEGRATED_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_RESTORE_INTEGRATED',
       },
+      {
+        name: 'Amplify Life Dallas',
+        assistantIdVar: 'AMPLIFY_LIFE_DALLAS_ASSISTANT_ID',
+        apiKeyVar: 'AMPLIFY_LIFE_DALLAS_GHL_API_KEY',
+        calendarIdVar: 'AMPLIFY_LIFE_DALLAS_CALENDAR_ID',
+        calendarIdCallbackVar: 'AMPLIFY_LIFE_DALLAS_CALLBACK_CALENDAR_ID',
+        locationIdVar: 'AMPLIFY_LIFE_DALLAS_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_DALLAS',
+      },
     ];
 
     const missingConfigs: string[] = [];
@@ -189,6 +199,14 @@ export class ClientConfigManager {
       const calendarId = process.env[clientDef.calendarIdVar];
       if (calendarId) {
         config.calendarId = calendarId;
+      }
+
+      // Add optional callback calendar ID if configured
+      if ('calendarIdCallbackVar' in clientDef && clientDef.calendarIdCallbackVar) {
+        const callbackCalendarId = process.env[clientDef.calendarIdCallbackVar];
+        if (callbackCalendarId) {
+          config.callbackCalendarId = callbackCalendarId;
+        }
       }
 
       // Add optional location ID if configured
@@ -347,6 +365,14 @@ export class ClientConfigManager {
   static getCalendarId(assistantId: string): string | undefined {
     const config = this.getConfigByAssistantId(assistantId);
     return config?.calendarId;
+  }
+
+  /**
+   * Get Callback Calendar ID by Assistant ID
+   */
+  static getCallbackCalendarId(assistantId: string): string | undefined {
+    const config = this.getConfigByAssistantId(assistantId);
+    return config?.callbackCalendarId;
   }
 
   /**
