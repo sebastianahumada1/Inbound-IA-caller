@@ -396,18 +396,6 @@ export class VapiWebhookHandler {
                     data: { found: false, callerType: 'unknown', message: 'No phone number available for lookup.' },
                 };
             }
-            // Normalize international numbers to US format (+1) so they match how
-            // contacts are stored in HotProspector (10-digit US format without country code).
-            // e.g. +573008669878 → +13008669878
-            const digits = phone.replace(/\D/g, '');
-            if (!phone.startsWith('+1') && digits.length > 10) {
-                const normalized = '+1' + digits.slice(-10);
-                Logger.info('[LOOKUP_CALLER] Normalized international number to US format', {
-                    original: phone,
-                    normalized,
-                });
-                phone = normalized;
-            }
             Logger.info('[LOOKUP_CALLER] Looking up caller in HotProspector', {
                 toolCallId: id,
                 callId,
