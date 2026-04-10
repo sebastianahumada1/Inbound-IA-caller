@@ -448,23 +448,27 @@ export class VapiWebhookHandler {
   private async handleLookupCaller(id: string, args: any, callId?: string, customerPhone?: string | null): Promise<ToolResult> {
     try {
       const validatedArgs = LookupCallerArgsSchema.parse(args);
-      let phone = validatedArgs.phone;
 
-      // If the AI sent an invalid/placeholder phone, fall back to the real caller number
-      const isInvalid = !phone || phone === 'unknown' || phone === 'Unknown' || phone.length < 5;
-      if (isInvalid && customerPhone) {
-        Logger.warn('[LOOKUP_CALLER] AI sent invalid phone, using real caller number', {
-          callId,
-          aiPhone: phone,
-          customerPhone,
-        });
-        phone = customerPhone;
+      // Always prefer the real caller phone from VAPI call data.
+      // The AI frequently sends incomplete numbers (e.g. "+1") because it
+      // doesn't know the caller's full number — the server does.
+      const phone = customerPhone || validatedArgs.phone;
+
+      if (!phone) {
+        Logger.warn('[LOOKUP_CALLER] No phone number available', { callId });
+        return {
+          id,
+          ok: true,
+          data: { found: false, callerType: 'unknown', message: 'No phone number available for lookup.' },
+        };
       }
 
       Logger.info('[LOOKUP_CALLER] Looking up caller in HotProspector', {
         toolCallId: id,
         callId,
         phone,
+        aiPhone: validatedArgs.phone,
+        usedRealCallerPhone: !!customerPhone,
       });
 
       const hpResult = await hotProspectorSearchByPhone(phone);

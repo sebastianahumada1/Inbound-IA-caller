@@ -62,18 +62,22 @@ export type HotProspectorSearchResult = {
 
 // ────────────────────────────── Helpers ─────────────────────────────
 
-/** Strip everything that is not a digit. 
- * HP stores numbers as 10 digits (no country code) for US.
+/** Strip everything that is not a digit.
+ * For US numbers (10 or 11 digits starting with 1): return last 10 digits,
+ * since HP stores US mobiles without country code.
+ * For international numbers (>11 digits or not starting with 1): return all
+ * digits so HP can match however the number was stored.
  */
 function digitsOnly(phone: string): string {
-  let digits = phone.replace(/\D/g, "");
-  
-  // Always take the last 10 digits to ensure we match HP's format
-  // regardless of whether a country code (like +1) was provided.
-  if (digits.length >= 10) {
+  const digits = phone.replace(/\D/g, "");
+
+  // US number with country code (+1xxxxxxxxxx = 11 digits starting with 1)
+  // or plain 10-digit US number → take last 10 digits.
+  if ((digits.length === 11 && digits.startsWith("1")) || digits.length === 10) {
     return digits.slice(-10);
   }
-  
+
+  // International number: keep all digits as-is.
   return digits;
 }
 
