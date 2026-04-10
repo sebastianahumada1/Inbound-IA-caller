@@ -53,6 +53,8 @@ export type HotProspectorSearchResult = {
 };
 /**
  * Search HotProspector by phone number.
+ * For international numbers, tries the full digit string first, then falls
+ * back to the last 10 digits (the format HP typically stores US numbers).
  *
  * @param inputPhone – any format (E.164, with spaces/dashes, etc.)
  * @returns `{ ok, count, lead }` where `lead` is the first result (or null)

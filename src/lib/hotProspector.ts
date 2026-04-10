@@ -81,47 +81,21 @@ function digitsOnly(phone: string): string {
   return digits;
 }
 
-// ────────────────────────── Main function ───────────────────────────
+// ────────────────────────── Helpers ─────────────────────────────────
 
-/**
- * Search HotProspector by phone number.
- *
- * @param inputPhone – any format (E.164, with spaces/dashes, etc.)
- * @returns `{ ok, count, lead }` where `lead` is the first result (or null)
- */
-export async function hotProspectorSearchByPhone(
-  inputPhone: string,
+/** Execute a single HP search request for a given searchText. */
+async function executeHPSearch(
+  api_uId: string,
+  api_key: string,
+  GroupId: string,
+  searchText: string,
 ): Promise<HotProspectorSearchResult> {
-  const api_uId = process.env.HP_API_UID;
-  const api_key = process.env.HP_API_KEY;
-  const GroupId = process.env.HP_GROUP_ID;
-  const locationId = process.env.HP_LOCATION_ID; // optional, sent if present
-
-  if (!api_uId || !api_key || !GroupId) {
-    const missing = [
-      !api_uId && "HP_API_UID",
-      !api_key && "HP_API_KEY",
-      !GroupId && "HP_GROUP_ID",
-    ].filter(Boolean);
-    const msg = `HotProspector config incomplete – missing: ${missing.join(", ")}`;
-    Logger.error("[HOTPROSPECTOR]" + msg);
-    throw new Error(msg);
-  }
-
-  const phone = digitsOnly(inputPhone);
-
-  Logger.info("[HOTPROSPECTOR] Searching by phone", {
-    phoneDigits: phone,
-    GroupId,
-    hasLocationId: !!locationId,
-  });
-
   const body: Record<string, string> = {
     api_uId,
     api_key,
     GroupId,
     searchField: "mobile",
-    searchText: phone,
+    searchText,
     sortBy: "ASC",
     Method: "SearchByUserInput",
   };
@@ -142,15 +116,78 @@ export async function hotProspectorSearchByPhone(
   }
 
   const raw = await resp.json();
-  // HP API wraps the response in an array: [{response, Results, message}]
   const data: HotProspectorResponse = Array.isArray(raw) ? raw[0] : raw;
   const results = Array.isArray(data?.Results) ? data.Results : [];
 
-  const result: HotProspectorSearchResult = {
+  return {
     ok: data?.response === "true" || data?.response === true,
     count: results.length,
     lead: results[0] ?? null,
   };
+}
+
+// ────────────────────────── Main function ───────────────────────────
+
+/**
+ * Search HotProspector by phone number.
+ * For international numbers, tries the full digit string first, then falls
+ * back to the last 10 digits (the format HP typically stores US numbers).
+ *
+ * @param inputPhone – any format (E.164, with spaces/dashes, etc.)
+ * @returns `{ ok, count, lead }` where `lead` is the first result (or null)
+ */
+export async function hotProspectorSearchByPhone(
+  inputPhone: string,
+): Promise<HotProspectorSearchResult> {
+  const api_uId = process.env.HP_API_UID;
+  const api_key = process.env.HP_API_KEY;
+  const GroupId = process.env.HP_GROUP_ID;
+
+  if (!api_uId || !api_key || !GroupId) {
+    const missing = [
+      !api_uId && "HP_API_UID",
+      !api_key && "HP_API_KEY",
+      !GroupId && "HP_GROUP_ID",
+    ].filter(Boolean);
+    const msg = `HotProspector config incomplete – missing: ${missing.join(", ")}`;
+    Logger.error("[HOTPROSPECTOR]" + msg);
+    throw new Error(msg);
+  }
+
+  const primaryPhone = digitsOnly(inputPhone);
+  const last10 = inputPhone.replace(/\D/g, "").slice(-10);
+  const needsFallback = primaryPhone !== last10 && last10.length === 10;
+
+  Logger.info("[HOTPROSPECTOR] Searching by phone", {
+    inputPhone,
+    primaryPhone,
+    last10Fallback: needsFallback ? last10 : null,
+    GroupId,
+  });
+
+  const result = await executeHPSearch(api_uId, api_key, GroupId, primaryPhone);
+
+  // If primary search returned no results and the number is international,
+  // retry with the last 10 digits (HP often stores numbers without country code).
+  if (result.count === 0 && needsFallback) {
+    Logger.info("[HOTPROSPECTOR] No result with full number, retrying with last 10 digits", {
+      primaryPhone,
+      last10,
+    });
+    const fallbackResult = await executeHPSearch(api_uId, api_key, GroupId, last10);
+
+    Logger.info("[HOTPROSPECTOR] Fallback search result", {
+      ok: fallbackResult.ok,
+      count: fallbackResult.count,
+      hasLead: !!fallbackResult.lead,
+      leadId: fallbackResult.lead?.LeadId,
+      leadName: fallbackResult.lead
+        ? `${fallbackResult.lead.Firstname ?? ""} ${fallbackResult.lead.Lastname ?? ""}`.trim()
+        : null,
+    });
+
+    return fallbackResult;
+  }
 
   Logger.info("[HOTPROSPECTOR] Search result", {
     ok: result.ok,
