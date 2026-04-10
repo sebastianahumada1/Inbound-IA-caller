@@ -56,6 +56,64 @@ export class GHLConnector {
         return defaultKey || '';
     }
     /**
+     * Lookup a GHL contact by phone number.
+     * Returns a ghlMetadata-shaped object or null if not found.
+     */
+    async lookupContactByPhone(phone) {
+        const ghlApiKey = this.getGHLApiKey();
+        if (!ghlApiKey) {
+            Logger.warn('[GHL_CONNECTOR] Cannot lookup contact - no API key');
+            return null;
+        }
+        const trySearch = async (phoneParam) => {
+            const response = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(phoneParam)}`, {
+                headers: {
+                    'Authorization': `Bearer ${ghlApiKey}`,
+                    'Content-Type': 'application/json',
+                    'Version': '2021-07-28',
+                },
+            });
+            if (response.ok) {
+                return response.data?.contacts || response.data?.data?.contacts || [];
+            }
+            return [];
+        };
+        try {
+            let contacts = await trySearch(phone);
+            if (contacts.length === 0 && phone.startsWith('+')) {
+                contacts = await trySearch(phone.substring(1));
+            }
+            if (contacts.length === 0) {
+                Logger.warn('[GHL_CONNECTOR] No contact found by phone', { phone: '***' + phone.slice(-4) });
+                return null;
+            }
+            const contact = contacts[0];
+            Logger.info('[GHL_CONNECTOR] Contact found by phone lookup', {
+                contactId: contact.id,
+                phone: '***' + phone.slice(-4),
+            });
+            return {
+                contactId: contact.id,
+                contact: {
+                    id: contact.id,
+                    firstName: contact.firstName || '',
+                    lastName: contact.lastName || '',
+                    name: contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
+                    email: contact.email || '',
+                    phone: contact.phone || contact.phoneNumber || phone,
+                    phoneNumber: contact.phoneNumber || contact.phone || phone,
+                },
+            };
+        }
+        catch (error) {
+            Logger.error('[GHL_CONNECTOR] Phone lookup failed', {
+                phone: '***' + phone.slice(-4),
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+            return null;
+        }
+    }
+    /**
      * Get the Calendar ID based on Assistant ID
      */
     getCalendarId() {
@@ -408,7 +466,7 @@ export class GHLConnector {
             };
         }
     }
-    async checkCalendarAvailability(id, args) {
+    async checkCalendarAvailability(id, args, _callId, _stateStorage) {
         try {
             Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args });
             const ghlApiKey = this.getGHLApiKey();
@@ -431,11 +489,18 @@ export class GHLConnector {
                     error,
                 };
             }
+            // Trust the AI's dateTime as-is — transcript correction was overwriting
+            // legitimate slot queries (e.g. checking 3 PM when user said "11 AM")
+            const correctedDateTime = args.dateTime;
+            Logger.info('[CALENDAR] Using dateTime as provided by AI', {
+                id,
+                dateTime: correctedDateTime,
+            });
             // Parse the requested dateTime
-            const requestedDate = new Date(args.dateTime);
+            const requestedDate = new Date(correctedDateTime);
             if (isNaN(requestedDate.getTime())) {
                 const error = 'Invalid dateTime format';
-                Logger.error('[CALENDAR] ' + error, { id, dateTime: args.dateTime });
+                Logger.error('[CALENDAR] ' + error, { id, dateTime: correctedDateTime });
                 return {
                     id,
                     ok: false,
@@ -536,6 +601,8 @@ export class GHLConnector {
                 isAvailable,
                 freeSlotsCount: freeSlots.length,
             });
+            // When unavailable, include the actual available slots for the day so the AI can offer alternatives
+            const availableSlotsForDay = freeSlots.slice(0, 10); // up to 10 slots
             return {
                 id,
                 ok: true,
@@ -545,7 +612,10 @@ export class GHLConnector {
                     duration: args.durationMinutes || 30,
                     message: isAvailable
                         ? 'The requested time slot is available'
-                        : 'The requested time slot is not available',
+                        : freeSlots.length > 0
+                            ? `The requested time slot is not available. Available slots for this day: ${availableSlotsForDay.join(', ')}`
+                            : 'The requested time slot is not available and there are no open slots for this day.',
+                    ...(isAvailable ? {} : { availableSlots: availableSlotsForDay }),
                 },
             };
         }
@@ -562,7 +632,7 @@ export class GHLConnector {
             };
         }
     }
-    async scheduleAppointment(id, args, ghlMetadata) {
+    async scheduleAppointment(id, args, ghlMetadata, _callId, _stateStorage) {
         try {
             Logger.info('[CALENDAR] Processing schedule_appointment', {
                 id,
@@ -658,12 +728,21 @@ export class GHLConnector {
                     });
                 }
             }
-            // Validate date formats
-            const startTime = new Date(args.startTime);
-            const endTime = new Date(args.endTime);
+            // Trust the AI's startTime/endTime as-is — transcript correction was
+            // corrupting times by forcing every datetime to match the spoken hour
+            const correctedStartTime = args.startTime;
+            const correctedEndTime = args.endTime;
+            Logger.info('[CALENDAR] Using startTime/endTime as provided by AI', {
+                id,
+                startTime: correctedStartTime,
+                endTime: correctedEndTime,
+            });
+            // Validate date formats (using corrected times)
+            const startTime = new Date(correctedStartTime);
+            const endTime = new Date(correctedEndTime);
             if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
                 const error = 'Invalid date format for startTime or endTime';
-                Logger.error('[CALENDAR] ' + error, { id, args });
+                Logger.error('[CALENDAR] ' + error, { id, startTime: correctedStartTime, endTime: correctedEndTime });
                 return {
                     id,
                     ok: false,
@@ -792,12 +871,12 @@ export class GHLConnector {
             // GHL requires: /calendars/events/appointments with firstName, lastName, phone, selectedSlot
             const apiUrl = `https://services.leadconnectorhq.com/calendars/events/appointments`;
             // GHL expects selectedSlot as ISO string with timezone
-            // Convert startTime to ISO string with timezone (EST)
+            // Use correctedStartTime (already corrected above)
             // If startTime is already in correct format, use it; otherwise convert
-            let selectedSlot = args.startTime;
-            if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00')) {
+            let selectedSlot = correctedStartTime;
+            if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00') && !selectedSlot.includes('-06:00')) {
                 // If no timezone, assume EST and add it
-                const date = new Date(args.startTime);
+                const date = new Date(correctedStartTime);
                 selectedSlot = date.toISOString().replace('Z', '-05:00');
             }
             // Normalize phone number - GHL requires E.164 format (with + and country code)

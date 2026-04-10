@@ -15,6 +15,14 @@ export declare class GHLConnector {
      */
     private getGHLApiKey;
     /**
+     * Lookup a GHL contact by phone number.
+     * Returns a ghlMetadata-shaped object or null if not found.
+     */
+    lookupContactByPhone(phone: string): Promise<{
+        contactId: string;
+        contact: any;
+    } | null>;
+    /**
      * Get the Calendar ID based on Assistant ID
      */
     private getCalendarId;
@@ -24,6 +32,6 @@ export declare class GHLConnector {
     addNote(id: string, args: AddNoteArgs): Promise<ToolResult>;
     updateStage(id: string, args: UpdateStageArgs): Promise<ToolResult>;
     addNoteByContactIdViaAPI(id: string, contactId: string, note: string): Promise<ToolResult>;
-    checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs): Promise<ToolResult>;
-    scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any): Promise<ToolResult>;
+    checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any): Promise<ToolResult>;
+    scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any): Promise<ToolResult>;
 }

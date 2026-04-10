@@ -31,7 +31,15 @@ export class ClientConfigManager {
                 slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS',
             },
             {
-                name: 'Third Client',
+                name: 'West Texas Back Neck',
+                assistantIdVar: 'WEST_TEXAS_BACK_NECK_ASSISTANT_ID',
+                apiKeyVar: 'WEST_TEXAS_BACK_NECK_GHL_API_KEY',
+                calendarIdVar: 'WEST_TEXAS_BACK_NECK_CALENDAR_ID',
+                locationIdVar: 'WEST_TEXAS_BACK_NECK_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS_BACK_NECK',
+            },
+            {
+                name: 'Jennings',
                 assistantIdVar: 'THIRD_CLIENT_ASSISTANT_ID',
                 apiKeyVar: 'THIRD_CLIENT_GHL_API_KEY',
                 calendarIdVar: 'THIRD_CLIENT_CALENDAR_ID',
@@ -53,6 +61,95 @@ export class ClientConfigManager {
                 calendarIdVar: 'NUVIVE_CALENDAR_ID',
                 locationIdVar: 'NUVIVE_LOCATION_ID',
                 slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE',
+            },
+            {
+                name: 'NuVive Back Neck',
+                assistantIdVar: 'NUVIVE_BACK_NECK_ASSISTANT_ID',
+                apiKeyVar: 'NUVIVE_BACK_NECK_GHL_API_KEY',
+                calendarIdVar: 'NUVIVE_BACK_NECK_CALENDAR_ID',
+                locationIdVar: 'NUVIVE_BACK_NECK_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE_BACK_NECK',
+            },
+            {
+                name: 'Jennings Back Neck',
+                assistantIdVar: 'JENNINGS_BACK_NECK_ASSISTANT_ID',
+                apiKeyVar: 'JENNINGS_BACK_NECK_GHL_API_KEY',
+                calendarIdVar: 'JENNINGS_BACK_NECK_CALENDAR_ID',
+                locationIdVar: 'JENNINGS_BACK_NECK_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_JENNINGS_BACK_NECK',
+            },
+            {
+                name: 'NuWave',
+                assistantIdVar: 'NUWAVE_ASSISTANT_ID',
+                apiKeyVar: 'NUWAVE_GHL_API_KEY',
+                calendarIdVar: 'NUWAVE_CALENDAR_ID',
+                locationIdVar: 'NUWAVE_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_NUWAVE',
+            },
+            {
+                name: 'ReliefSource',
+                assistantIdVar: 'RELIEFSOURCE_ASSISTANT_ID',
+                apiKeyVar: 'RELIEFSOURCE_GHL_API_KEY',
+                calendarIdVar: 'RELIEFSOURCE_CALENDAR_ID',
+                locationIdVar: 'RELIEFSOURCE_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_RELIEFSOURCE',
+            },
+            {
+                name: 'Belden Village',
+                assistantIdVar: 'BELDEN_VILLAGE_ASSISTANT_ID',
+                apiKeyVar: 'BELDEN_VILLAGE_GHL_API_KEY',
+                calendarIdVar: 'BELDEN_VILLAGE_CALENDAR_ID',
+                locationIdVar: 'BELDEN_VILLAGE_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_BELDEN_VILLAGE',
+            },
+            {
+                name: 'James Health Center',
+                assistantIdVar: 'JAMES_HEALTH_CENTER_ASSISTANT_ID',
+                apiKeyVar: 'JAMES_HEALTH_CENTER_GHL_API_KEY',
+                calendarIdVar: 'JAMES_HEALTH_CENTER_CALENDAR_ID',
+                locationIdVar: 'JAMES_HEALTH_CENTER_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_JAMES_HEALTH_CENTER',
+            },
+            {
+                name: 'Amplify Life Baldwin',
+                assistantIdVar: 'AMPLIFY_LIFE_BALDWIN_ASSISTANT_ID',
+                apiKeyVar: 'AMPLIFY_LIFE_BALDWIN_GHL_API_KEY',
+                calendarIdVar: 'AMPLIFY_LIFE_BALDWIN_CALENDAR_ID',
+                locationIdVar: 'AMPLIFY_LIFE_BALDWIN_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_BALDWIN',
+            },
+            {
+                name: 'Miami Valley',
+                assistantIdVar: 'MIAMI_VALLEY_ASSISTANT_ID',
+                apiKeyVar: 'MIAMI_VALLEY_GHL_API_KEY',
+                calendarIdVar: 'MIAMI_VALLEY_CALENDAR_ID',
+                locationIdVar: 'MIAMI_VALLEY_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY',
+            },
+            {
+                name: 'Northeast',
+                assistantIdVar: 'NORTHEAST_ASSISTANT_ID',
+                apiKeyVar: 'NORTHEAST_GHL_API_KEY',
+                calendarIdVar: 'NORTHEAST_CALENDAR_ID',
+                locationIdVar: 'NORTHEAST_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_NORTHEAST',
+            },
+            {
+                name: 'Restore Integrated',
+                assistantIdVar: 'RESTORE_INTEGRATED_ASSISTANT_ID',
+                apiKeyVar: 'RESTORE_INTEGRATED_GHL_API_KEY',
+                calendarIdVar: 'RESTORE_INTEGRATED_CALENDAR_ID',
+                locationIdVar: 'RESTORE_INTEGRATED_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_RESTORE_INTEGRATED',
+            },
+            {
+                name: 'Amplify Life Dallas',
+                assistantIdVar: 'AMPLIFY_LIFE_DALLAS_ASSISTANT_ID',
+                apiKeyVar: 'AMPLIFY_LIFE_DALLAS_GHL_API_KEY',
+                calendarIdVar: 'AMPLIFY_LIFE_DALLAS_CALENDAR_ID',
+                calendarIdCallbackVar: 'AMPLIFY_LIFE_DALLAS_CALLBACK_CALENDAR_ID',
+                locationIdVar: 'AMPLIFY_LIFE_DALLAS_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_DALLAS',
             },
         ];
         const missingConfigs = [];
@@ -82,6 +179,13 @@ export class ClientConfigManager {
             if (calendarId) {
                 config.calendarId = calendarId;
             }
+            // Add optional callback calendar ID if configured
+            if ('calendarIdCallbackVar' in clientDef && clientDef.calendarIdCallbackVar) {
+                const callbackCalendarId = process.env[clientDef.calendarIdCallbackVar];
+                if (callbackCalendarId) {
+                    config.callbackCalendarId = callbackCalendarId;
+                }
+            }
             // Add optional location ID if configured
             if (clientDef.locationIdVar) {
                 const locationId = process.env[clientDef.locationIdVar];
@@ -103,6 +207,74 @@ export class ClientConfigManager {
                 hasCalendarId: !!calendarId,
                 hasSlackChannel: !!slackChannel,
             });
+        }
+        // Register alias assistant IDs that share the same configuration
+        // Premier Wellness Back Neck uses the same config as Premier Wellness
+        const premierWellnessAssistantId = process.env['PREMIER_WELLNESS_ASSISTANT_ID'];
+        const premierWellnessBackNeckAssistantId = process.env['PREMIER_WELLNESS_BACK_NECK_ASSISTANT_ID'];
+        if (premierWellnessAssistantId && premierWellnessBackNeckAssistantId) {
+            const premierConfig = this.configs.get(premierWellnessAssistantId);
+            if (premierConfig) {
+                // Create a copy with ALL properties from Premier Wellness, explicitly copying each property
+                const aliasConfig = {
+                    name: 'Premier Wellness Back Neck',
+                    assistantId: premierWellnessBackNeckAssistantId,
+                    ghlApiKey: premierConfig.ghlApiKey,
+                };
+                // Copy optional properties only if they exist
+                if (premierConfig.calendarId) {
+                    aliasConfig.calendarId = premierConfig.calendarId;
+                }
+                if (premierConfig.locationId) {
+                    aliasConfig.locationId = premierConfig.locationId;
+                }
+                if (premierConfig.slackChannelId) {
+                    aliasConfig.slackChannelId = premierConfig.slackChannelId;
+                }
+                this.configs.set(premierWellnessBackNeckAssistantId, aliasConfig);
+                configuredClients.push('Premier Wellness Back Neck (alias)');
+                Logger.info('[CLIENT_CONFIG] Registered alias: Premier Wellness Back Neck -> Premier Wellness', {
+                    aliasAssistantId: premierWellnessBackNeckAssistantId.substring(0, 8) + '...',
+                    parentAssistantId: premierWellnessAssistantId.substring(0, 8) + '...',
+                    hasGhlApiKey: !!aliasConfig.ghlApiKey,
+                    hasCalendarId: !!aliasConfig.calendarId,
+                    hasLocationId: !!aliasConfig.locationId,
+                    hasSlackChannelId: !!aliasConfig.slackChannelId,
+                });
+            }
+            else {
+                Logger.warn('[CLIENT_CONFIG] Cannot create alias: Premier Wellness config not found', {
+                    premierWellnessAssistantId: premierWellnessAssistantId.substring(0, 8) + '...',
+                });
+            }
+        }
+        // Register Inbound Default assistant as alias of Premier Wellness
+        const inboundDefaultAssistantId = process.env['VAPI_ASSISTANT_DEFAULT_ID'];
+        if (inboundDefaultAssistantId && premierWellnessAssistantId) {
+            const premierConfig = this.configs.get(premierWellnessAssistantId);
+            if (premierConfig && !this.configs.has(inboundDefaultAssistantId)) {
+                const inboundConfig = {
+                    name: 'Premier Inbound Neuro',
+                    assistantId: inboundDefaultAssistantId,
+                    ghlApiKey: premierConfig.ghlApiKey,
+                };
+                if (premierConfig.calendarId)
+                    inboundConfig.calendarId = premierConfig.calendarId;
+                if (premierConfig.locationId)
+                    inboundConfig.locationId = premierConfig.locationId;
+                if (premierConfig.slackChannelId)
+                    inboundConfig.slackChannelId = premierConfig.slackChannelId;
+                this.configs.set(inboundDefaultAssistantId, inboundConfig);
+                configuredClients.push('Premier Inbound Neuro (alias)');
+                Logger.info('[CLIENT_CONFIG] Registered alias: Premier Inbound Neuro -> Premier Wellness', {
+                    aliasAssistantId: inboundDefaultAssistantId.substring(0, 8) + '...',
+                    parentAssistantId: premierWellnessAssistantId.substring(0, 8) + '...',
+                    hasGhlApiKey: !!inboundConfig.ghlApiKey,
+                    hasCalendarId: !!inboundConfig.calendarId,
+                    hasLocationId: !!inboundConfig.locationId,
+                    hasSlackChannelId: !!inboundConfig.slackChannelId,
+                });
+            }
         }
         // Log initialization summary
         if (this.configs.size === 0) {
@@ -156,6 +328,13 @@ export class ClientConfigManager {
     static getCalendarId(assistantId) {
         const config = this.getConfigByAssistantId(assistantId);
         return config?.calendarId;
+    }
+    /**
+     * Get Callback Calendar ID by Assistant ID
+     */
+    static getCallbackCalendarId(assistantId) {
+        const config = this.getConfigByAssistantId(assistantId);
+        return config?.callbackCalendarId;
     }
     /**
      * Get Location ID by Assistant ID

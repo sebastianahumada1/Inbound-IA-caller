@@ -8,6 +8,8 @@ import cors from 'cors';
 import { VapiWebhookHandler } from './vapi.js';
 import { Logger, logRequest } from './utils/logger.js';
 import { ClientConfigManager } from './utils/client-config.js';
+import { hotProspectorSearchByPhone } from './lib/hotProspector.js';
+import { decideCallRoute } from './services/callRouter.js';
 const app = express();
 const port = process.env.PORT || 3000;
 const vapiHandler = new VapiWebhookHandler();
@@ -51,6 +53,20 @@ app.get('/', async (_req, res) => {
         slackChannelId: !!process.env.SLACK_CHANNEL_ID,
         clientsConfigured: configuredClients,
     };
+    // Inbound / HotProspector configs
+    const inboundConfigs = {
+        hpApiUid: !!process.env.HP_API_UID,
+        hpApiKey: !!process.env.HP_API_KEY,
+        hpGroupId: !!process.env.HP_GROUP_ID,
+        hpLocationId: !!process.env.HP_LOCATION_ID,
+        vapiAssistantDefaultId: !!process.env.VAPI_ASSISTANT_DEFAULT_ID,
+        vapiAssistantFallbackId: !!process.env.VAPI_ASSISTANT_FALLBACK_ID,
+        vapiWebhookSecret: !!process.env.VAPI_WEBHOOK_SECRET,
+    };
+    // Check which assistant IDs from Vapi are NOT mapped in client-config
+    const knownAssistantIds = allClients.map(c => c.assistantId);
+    const inboundDefaultId = process.env.VAPI_ASSISTANT_DEFAULT_ID || '';
+    const inboundFallbackId = process.env.VAPI_ASSISTANT_FALLBACK_ID || '';
     const configuredCount = Object.values(configs).filter(v => typeof v === 'boolean' ? v : v > 0).length;
     const totalConfigs = Object.keys(configs).length;
     const html = `
@@ -488,6 +504,105 @@ app.get('/', async (_req, res) => {
         </ul>
       </div>
       
+      <!-- Inbound / HotProspector Config -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon yellow">📞</div>
+          <h2 class="card-title">Inbound & HotProspector</h2>
+        </div>
+        <ul class="config-list">
+          <li class="config-item">
+            <span class="config-name">HP_API_UID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.hpApiUid ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.hpApiUid ? 'Configured' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">HP_API_KEY</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.hpApiKey ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.hpApiKey ? 'Configured' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">HP_GROUP_ID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.hpGroupId ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.hpGroupId ? 'Configured' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">HP_LOCATION_ID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.hpLocationId ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.hpLocationId ? 'Configured' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">VAPI_ASSISTANT_DEFAULT_ID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.vapiAssistantDefaultId ? 'ok' : 'error'}"></span>
+              ${inboundConfigs.vapiAssistantDefaultId ? inboundDefaultId.substring(0, 8) + '...' : 'Missing'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">VAPI_ASSISTANT_FALLBACK_ID</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.vapiAssistantFallbackId ? 'ok' : 'warning'}"></span>
+              ${inboundConfigs.vapiAssistantFallbackId ? inboundFallbackId.substring(0, 8) + '...' : 'Not set'}
+            </span>
+          </li>
+          <li class="config-item">
+            <span class="config-name">VAPI_WEBHOOK_SECRET</span>
+            <span class="config-status">
+              <span class="status-dot ${inboundConfigs.vapiWebhookSecret ? 'ok' : 'warning'}"></span>
+              ${inboundConfigs.vapiWebhookSecret ? 'Secured' : 'Not set'}
+            </span>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Assistant ID Mapping Audit -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-icon purple">🔍</div>
+          <h2 class="card-title">Assistant ID Mapping</h2>
+        </div>
+        <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.85rem;">
+          Assistants must be mapped in client-config to process end-of-call reports, GHL notes, and Slack uploads.
+        </p>
+        <ul class="config-list">
+          ${allClients.map(client => `
+          <li class="config-item">
+            <span class="config-name">${client.name}<br><span style="font-size:0.7rem;color:var(--text-secondary)">${client.assistantId.substring(0, 12)}...</span></span>
+            <span class="config-status">
+              <span class="status-dot ok"></span>
+              Mapped
+            </span>
+          </li>
+          `).join('')}
+          ${inboundDefaultId && !knownAssistantIds.includes(inboundDefaultId) ? `
+          <li class="config-item" style="background: rgba(255, 71, 87, 0.08); border-radius: 6px; padding: 10px 8px;">
+            <span class="config-name" style="color: var(--accent-yellow);">INBOUND DEFAULT<br><span style="font-size:0.7rem">${inboundDefaultId.substring(0, 12)}...</span></span>
+            <span class="config-status">
+              <span class="status-dot warning"></span>
+              Not in client-config
+            </span>
+          </li>
+          ` : ''}
+          ${inboundFallbackId && inboundFallbackId !== inboundDefaultId && !knownAssistantIds.includes(inboundFallbackId) ? `
+          <li class="config-item" style="background: rgba(255, 71, 87, 0.08); border-radius: 6px; padding: 10px 8px;">
+            <span class="config-name" style="color: var(--accent-yellow);">INBOUND FALLBACK<br><span style="font-size:0.7rem">${inboundFallbackId.substring(0, 12)}...</span></span>
+            <span class="config-status">
+              <span class="status-dot warning"></span>
+              Not in client-config
+            </span>
+          </li>
+          ` : ''}
+        </ul>
+      </div>
+
       <!-- Endpoints -->
       <div class="card">
         <div class="card-header">
@@ -502,6 +617,10 @@ app.get('/', async (_req, res) => {
           <li class="endpoint-item">
             <span class="endpoint-method post">POST</span>
             <span class="endpoint-path">/vapi/webhook</span>
+          </li>
+          <li class="endpoint-item">
+            <span class="endpoint-method post">POST</span>
+            <span class="endpoint-path">/vapi/inbound</span>
           </li>
           <li class="endpoint-item">
             <span class="endpoint-method get">GET</span>
@@ -751,6 +870,171 @@ app.post('/slack/test', (req, res, next) => vapiHandler.validateToken(req, res, 
             message: 'Slack connection test failed',
             error: errorMessage,
             connected: false,
+        });
+    }
+});
+// ─────────────────────────────────────────────────────────────────────
+//  INBOUND  –  Vapi sends this webhook when an inbound call arrives.
+//  The server looks up the caller in HotProspector, decides the route,
+//  and responds with the assistant config that Vapi should use.
+// ─────────────────────────────────────────────────────────────────────
+/**
+ * Extract the caller phone number from the Vapi inbound payload.
+ * Tries several paths (Vapi can place it in different locations depending
+ * on the phone provider and call type).
+ */
+function extractCallerPhone(payload) {
+    return (payload?.message?.call?.customer?.number ??
+        payload?.message?.call?.from ??
+        payload?.message?.from ??
+        payload?.message?.call?.caller?.number ??
+        payload?.call?.customer?.number ??
+        payload?.call?.from ??
+        payload?.from ??
+        payload?.caller?.number ??
+        payload?.customer?.number ??
+        null);
+}
+/**
+ * Normalise a phone string to E.164 (best-effort).
+ * Returns the original string prefixed with "+" when it looks
+ * like a full international number without one.
+ */
+function normalizeToE164(phone) {
+    // Remove all whitespace, dashes, parens, dots
+    let cleaned = phone.replace(/[\s\-().]/g, '');
+    // Already E.164
+    if (/^\+\d{7,15}$/.test(cleaned))
+        return cleaned;
+    // Starts with digits only
+    if (/^\d{10}$/.test(cleaned)) {
+        // US 10-digit → +1
+        return `+1${cleaned}`;
+    }
+    if (/^1\d{10}$/.test(cleaned)) {
+        return `+${cleaned}`;
+    }
+    // Generic: add + if missing
+    if (!cleaned.startsWith('+') && /^\d{7,15}$/.test(cleaned)) {
+        return `+${cleaned}`;
+    }
+    return cleaned;
+}
+/** Digits only (for HotProspector searchText) */
+function toDigitsOnly(phone) {
+    return phone.replace(/\D/g, '');
+}
+app.post('/vapi/inbound', async (req, res) => {
+    const startTime = Date.now();
+    // ── 1. Validate webhook secret ────────────────────────────────────
+    const secret = req.headers['x-vapi-secret'];
+    const expectedSecret = process.env.VAPI_WEBHOOK_SECRET;
+    if (expectedSecret && secret !== expectedSecret) {
+        Logger.warn('[INBOUND] Invalid or missing x-vapi-secret', {
+            provided: secret ? 'present' : 'missing',
+            ip: req.ip,
+        });
+        res.status(401).json({ ok: false, message: 'Unauthorized' });
+        return;
+    }
+    try {
+        const payload = req.body;
+        const callId = payload?.message?.call?.id ?? payload?.call?.id ?? `inbound_${Date.now()}`;
+        Logger.info('[INBOUND] Webhook received', {
+            callId,
+            messageType: payload?.message?.type,
+            hasCall: !!payload?.message?.call,
+        });
+        // ── 2. Extract & normalise caller phone ─────────────────────────
+        const rawPhone = extractCallerPhone(payload);
+        if (!rawPhone) {
+            Logger.error('[INBOUND] Could not extract caller phone', {
+                callId,
+                payloadKeys: payload ? Object.keys(payload) : [],
+                messageKeys: payload?.message ? Object.keys(payload.message) : [],
+            });
+            // Respond 200 with fallback assistant so Vapi doesn't retry
+            const fallbackId = process.env.VAPI_ASSISTANT_FALLBACK_ID ??
+                process.env.VAPI_ASSISTANT_DEFAULT_ID ??
+                '';
+            res.status(200).json({
+                assistantId: fallbackId,
+                assistantOverrides: {
+                    variableValues: { callerType: 'unknown', phoneExtracted: 'false' },
+                },
+            });
+            return;
+        }
+        const callerE164 = normalizeToE164(rawPhone);
+        const phoneDigits = toDigitsOnly(rawPhone);
+        Logger.info('[INBOUND] Caller phone extracted', {
+            callId,
+            raw: rawPhone,
+            e164: callerE164,
+            digits: phoneDigits,
+        });
+        // ── 3. Lookup in HotProspector ──────────────────────────────────
+        let hpResult = null;
+        try {
+            hpResult = await hotProspectorSearchByPhone(callerE164);
+            Logger.info('[INBOUND] HotProspector lookup done', {
+                callId,
+                ok: hpResult.ok,
+                count: hpResult.count,
+                leadId: hpResult.lead?.LeadId,
+            });
+        }
+        catch (err) {
+            Logger.error('[INBOUND] HotProspector lookup failed – continuing with unknown caller path', {
+                callId,
+                error: err instanceof Error ? err.message : 'Unknown error',
+            });
+        }
+        // ── 4. Route decision ───────────────────────────────────────────
+        const routeCtx = {
+            callId,
+            callerPhone: callerE164,
+            phoneDigits,
+            leadFound: !!(hpResult?.ok && hpResult.lead),
+            lead: hpResult?.lead ?? null,
+        };
+        const decision = decideCallRoute(hpResult?.lead ?? null, routeCtx);
+        Logger.info('[INBOUND] Route decision', {
+            callId,
+            route: decision.routeLabel,
+            assistantId: decision.assistantId,
+            variableKeys: Object.keys(decision.variables),
+            durationMs: Date.now() - startTime,
+        });
+        // ── 5. Respond to Vapi ──────────────────────────────────────────
+        //   Vapi expects either { assistant: {...} } or { assistantId, assistantOverrides }
+        const vapiResponse = {
+            assistantId: decision.assistantId,
+        };
+        if (Object.keys(decision.variables).length > 0) {
+            vapiResponse.assistantOverrides = {
+                variableValues: decision.variables,
+            };
+        }
+        Logger.info('[INBOUND] Responding to Vapi', {
+            callId,
+            response: vapiResponse,
+            durationMs: Date.now() - startTime,
+        });
+        res.status(200).json(vapiResponse);
+    }
+    catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        Logger.error('[INBOUND] Unhandled error', { error: msg });
+        // Still return 200 with a fallback so Vapi doesn't hang
+        const fallbackId = process.env.VAPI_ASSISTANT_FALLBACK_ID ??
+            process.env.VAPI_ASSISTANT_DEFAULT_ID ??
+            '';
+        res.status(200).json({
+            assistantId: fallbackId,
+            assistantOverrides: {
+                variableValues: { callerType: 'error', errorMessage: msg },
+            },
         });
     }
 });
