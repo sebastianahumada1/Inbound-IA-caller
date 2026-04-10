@@ -494,6 +494,36 @@ export class VapiWebhookHandler {
       const fullPhone = mobile.startsWith('+') ? mobile : `${cc}${mobile}`;
       const cf = lead.Lead_Custom_Fields;
 
+      // Validate that the HP result actually belongs to the caller.
+      // HP's SearchByUserInput can return arbitrary results when no exact
+      // match exists. Compare trailing digits (last 10) to catch both US
+      // and international formats.
+      const callerDigits = phone.replace(/\D/g, '');
+      const leadDigits = mobile.replace(/\D/g, '');
+      if (callerDigits && leadDigits) {
+        const compareLen = Math.min(callerDigits.length, leadDigits.length, 10);
+        const callerSuffix = callerDigits.slice(-compareLen);
+        const leadSuffix = leadDigits.slice(-compareLen);
+        if (callerSuffix !== leadSuffix) {
+          Logger.warn('[LOOKUP_CALLER] HP result phone does not match caller — discarding', {
+            callId,
+            callerPhone: phone,
+            leadPhone: mobile,
+            leadName: fullName,
+          });
+          return {
+            id,
+            ok: true,
+            data: {
+              found: false,
+              callerType: 'unknown',
+              phone,
+              message: 'No record found for this phone number.',
+            },
+          };
+        }
+      }
+
       // Build a flat data object the agent can consume directly
       const leadData: Record<string, unknown> = {
         found: true,
