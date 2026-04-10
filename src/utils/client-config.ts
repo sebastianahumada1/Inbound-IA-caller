@@ -174,6 +174,15 @@ export class ClientConfigManager {
         locationIdVar: 'RESTORE_INTEGRATED_NEURO_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_RESTORE_INTEGRATED_NEURO',
       },
+      {
+        name: 'Amplify Life Dallas',
+        assistantIdVar: 'AMPLIFY_LIFE_DALLAS_ASSISTANT_ID',
+        apiKeyVar: 'AMPLIFY_LIFE_DALLAS_GHL_API_KEY',
+        calendarIdVar: 'AMPLIFY_LIFE_DALLAS_CALENDAR_ID',
+        callbackCalendarIdVar: 'AMPLIFY_LIFE_DALLAS_CALLBACK_CALENDAR_ID',
+        locationIdVar: 'AMPLIFY_LIFE_DALLAS_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_DALLAS',
+      },
     ];
 
     const missingConfigs: string[] = [];
