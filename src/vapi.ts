@@ -452,7 +452,7 @@ export class VapiWebhookHandler {
       // Always prefer the real caller phone from VAPI call data.
       // The AI frequently sends incomplete numbers (e.g. "+1") because it
       // doesn't know the caller's full number — the server does.
-      const phone = customerPhone || validatedArgs.phone;
+      let phone = customerPhone || validatedArgs.phone;
 
       if (!phone) {
         Logger.warn('[LOOKUP_CALLER] No phone number available', { callId });
@@ -461,6 +461,19 @@ export class VapiWebhookHandler {
           ok: true,
           data: { found: false, callerType: 'unknown', message: 'No phone number available for lookup.' },
         };
+      }
+
+      // Normalize international numbers to US format (+1) so they match how
+      // contacts are stored in HotProspector (10-digit US format without country code).
+      // e.g. +573008669878 → +13008669878
+      const digits = phone.replace(/\D/g, '');
+      if (!phone.startsWith('+1') && digits.length > 10) {
+        const normalized = '+1' + digits.slice(-10);
+        Logger.info('[LOOKUP_CALLER] Normalized international number to US format', {
+          original: phone,
+          normalized,
+        });
+        phone = normalized;
       }
 
       Logger.info('[LOOKUP_CALLER] Looking up caller in HotProspector', {
