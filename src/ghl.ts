@@ -200,6 +200,8 @@ export class GHLConnector {
             const clientName = ClientConfigManager.getClientName(this.assistantId);
             if (clientName.includes('Texas') || clientName.includes('West Texas')) {
               timezone = '-06:00'; // Central Time
+            } else if (clientName.includes('ChiroMedix')) {
+              timezone = '-08:00'; // Pacific Time
             }
           }
           
