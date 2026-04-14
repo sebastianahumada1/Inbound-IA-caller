@@ -167,6 +167,14 @@ export class ClientConfigManager {
         locationIdVar: 'AMPLIFY_LIFE_DALLAS_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_DALLAS',
       },
+      {
+        name: 'Chiromedix',
+        assistantIdVar: 'CHIROMEDIX_ASSISTANT_ID',
+        apiKeyVar: 'CHIROMEDIX_GHL_API_KEY',
+        calendarIdVar: 'CHIROMEDIX_CALENDAR_ID',
+        locationIdVar: 'CHIROMEDIX_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_CHIROMEDIX',
+      },
     ];
 
     const missingConfigs: string[] = [];
