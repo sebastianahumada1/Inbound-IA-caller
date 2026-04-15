@@ -192,6 +192,15 @@ export class ClientConfigManager {
         locationIdVar: 'CHIROMEDIX_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_CHIROMEDIX',
       },
+      {
+        name: 'Brandon Back Pain Relief',
+        assistantIdVar: 'BRANDON_BACK_PAIN_RELIEF_ASSISTANT_ID',
+        apiKeyVar: 'BRANDON_BACK_PAIN_RELIEF_GHL_API_KEY',
+        calendarIdVar: 'BRANDON_BACK_PAIN_RELIEF_CALENDAR_ID',
+        callbackCalendarIdVar: 'BRANDON_BACK_PAIN_RELIEF_CALLBACK_CALENDAR_ID',
+        locationIdVar: 'BRANDON_BACK_PAIN_RELIEF_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_BRANDON_BACK_PAIN_RELIEF',
+      },
     ];
 
     const missingConfigs: string[] = [];
