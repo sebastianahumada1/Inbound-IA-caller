@@ -175,6 +175,14 @@ export class ClientConfigManager {
         locationIdVar: 'CHIROMEDIX_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_CHIROMEDIX',
       },
+      {
+        name: 'Florida Neuropathy & Knee Pain Center',
+        assistantIdVar: 'FLORIDA_NEUROPATHY_ASSISTANT_ID',
+        apiKeyVar: 'FLORIDA_NEUROPATHY_GHL_API_KEY',
+        calendarIdVar: 'FLORIDA_NEUROPATHY_CALENDAR_ID',
+        locationIdVar: 'FLORIDA_NEUROPATHY_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_FLORIDA_NEUROPATHY',
+      },
     ];
 
     const missingConfigs: string[] = [];
