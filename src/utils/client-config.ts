@@ -201,6 +201,24 @@ export class ClientConfigManager {
         locationIdVar: 'BRANDON_BACK_PAIN_RELIEF_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_BRANDON_BACK_PAIN_RELIEF',
       },
+      {
+        name: 'Performance Sport and Spine',
+        assistantIdVar: 'PERFORMANCE_SPORT_AND_SPINE_ASSISTANT_ID',
+        apiKeyVar: 'PERFORMANCE_SPORT_AND_SPINE_GHL_API_KEY',
+        calendarIdVar: 'PERFORMANCE_SPORT_AND_SPINE_CALENDAR_ID',
+        callbackCalendarIdVar: 'PERFORMANCE_SPORT_AND_SPINE_CALLBACK_CALENDAR_ID',
+        locationIdVar: 'PERFORMANCE_SPORT_AND_SPINE_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_PERFORMANCE_SPORT_AND_SPINE',
+      },
+      {
+        name: 'DDP',
+        assistantIdVar: 'DDP_ASSISTANT_ID',
+        apiKeyVar: 'DDP_GHL_API_KEY',
+        calendarIdVar: 'DDP_CALENDAR_ID',
+        callbackCalendarIdVar: 'DDP_CALLBACK_CALENDAR_ID',
+        locationIdVar: 'DDP_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_DDP',
+      },
     ];
 
     const missingConfigs: string[] = [];
