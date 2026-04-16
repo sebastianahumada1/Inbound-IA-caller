@@ -183,6 +183,22 @@ export class ClientConfigManager {
         locationIdVar: 'FLORIDA_NEUROPATHY_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_FLORIDA_NEUROPATHY',
       },
+      {
+        name: 'Performance Sport and Spine Back',
+        assistantIdVar: 'PERFORMANCE_SPORT_SPINE_BACK_ASSISTANT_ID',
+        apiKeyVar: 'PERFORMANCE_SPORT_SPINE_BACK_GHL_API_KEY',
+        calendarIdVar: 'PERFORMANCE_SPORT_SPINE_BACK_CALENDAR_ID',
+        locationIdVar: 'PERFORMANCE_SPORT_SPINE_BACK_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_PERFORMANCE_SPORT_SPINE_BACK',
+      },
+      {
+        name: 'DDP',
+        assistantIdVar: 'DDP_ASSISTANT_ID',
+        apiKeyVar: 'DDP_GHL_API_KEY',
+        calendarIdVar: 'DDP_CALENDAR_ID',
+        locationIdVar: 'DDP_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_DDP',
+      },
     ];
 
     const missingConfigs: string[] = [];
