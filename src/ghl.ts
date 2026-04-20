@@ -11,6 +11,8 @@ import {
   ScheduleAppointmentArgs,
   CheckCallbackAvailabilityArgs,
   ScheduleCallbackArgs,
+  CheckGabrielAvailabilityArgs,
+  ScheduleGabrielArgs,
   ToolResult,
 } from './schemas.js';
 
@@ -113,6 +115,28 @@ export class GHLConnector {
     }
 
     Logger.warn('[GHL_CONNECTOR] No callback calendar ID found for assistant', {
+      assistantId: this.assistantId,
+    });
+    return null;
+  }
+
+  /**
+   * Get the Gabriel Calendar ID based on Assistant ID
+   */
+  private getGabrielCalendarId(): string | null {
+    if (this.assistantId) {
+      const gabrielCalendarId = ClientConfigManager.getGabrielCalendarId(this.assistantId);
+      if (gabrielCalendarId) {
+        Logger.info('[GHL_CONNECTOR] Using client-specific Gabriel calendar ID', {
+          assistantId: this.assistantId,
+          clientName: ClientConfigManager.getClientName(this.assistantId),
+          gabrielCalendarId,
+        });
+        return gabrielCalendarId;
+      }
+    }
+
+    Logger.warn('[GHL_CONNECTOR] No Gabriel calendar ID found for assistant', {
       assistantId: this.assistantId,
     });
     return null;
@@ -910,6 +934,26 @@ export class GHLConnector {
       return { id, ok: false, error };
     }
     return this.scheduleEventInternal(id, args, callbackCalendarId, 'callback', ghlMetadata, callId, stateStorage);
+  }
+
+  async checkGabrielAvailability(id: string, args: CheckGabrielAvailabilityArgs, callId?: string, stateStorage?: any): Promise<ToolResult> {
+    const gabrielCalendarId = this.getGabrielCalendarId();
+    if (!gabrielCalendarId) {
+      const error = 'Gabriel Calendar ID not configured for this client';
+      Logger.error('[GABRIEL] ' + error, { id, assistantId: this.assistantId });
+      return { id, ok: false, error };
+    }
+    return this.checkAvailabilityInternal(id, args.dateTime, args.durationMinutes || 30, gabrielCalendarId, 'appointment', callId, stateStorage);
+  }
+
+  async scheduleGabriel(id: string, args: ScheduleGabrielArgs, ghlMetadata?: any, callId?: string, stateStorage?: any): Promise<ToolResult> {
+    const gabrielCalendarId = this.getGabrielCalendarId();
+    if (!gabrielCalendarId) {
+      const error = 'Gabriel Calendar ID not configured for this client';
+      Logger.error('[GABRIEL] ' + error, { id, assistantId: this.assistantId });
+      return { id, ok: false, error };
+    }
+    return this.scheduleEventInternal(id, args, gabrielCalendarId, 'appointment', ghlMetadata, callId, stateStorage);
   }
 
   /**

@@ -227,6 +227,20 @@ export const ScheduleCallbackArgsSchema = z.object({
   notes: z.string().optional().default(''),
 });
 
+export const CheckGabrielAvailabilityArgsSchema = z.object({
+  dateTime: z.string().min(1),
+  durationMinutes: z.number().optional().default(30),
+});
+
+export const ScheduleGabrielArgsSchema = z.object({
+  contactId: z.string().optional(),
+  name: z.string().min(1),
+  phone: z.string().optional(),
+  startTime: z.string().min(1),
+  endTime: z.string().min(1),
+  notes: z.string().optional().default(''),
+});
+
 // Response schemas
 export const ToolResultSchema = z.object({
   id: z.string(),
@@ -253,6 +267,8 @@ export type CheckCalendarAvailabilityArgs = z.infer<typeof CheckCalendarAvailabi
 export type ScheduleAppointmentArgs = z.infer<typeof ScheduleAppointmentArgsSchema>;
 export type CheckCallbackAvailabilityArgs = z.infer<typeof CheckCallbackAvailabilityArgsSchema>;
 export type ScheduleCallbackArgs = z.infer<typeof ScheduleCallbackArgsSchema>;
+export type CheckGabrielAvailabilityArgs = z.infer<typeof CheckGabrielAvailabilityArgsSchema>;
+export type ScheduleGabrielArgs = z.infer<typeof ScheduleGabrielArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;
 
