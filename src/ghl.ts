@@ -818,19 +818,28 @@ export class GHLConnector {
       }
 
       const endDate = new Date(requestedDate.getTime() + durationMinutes * 60000);
-      const startDate = new Date(requestedDate.getTime() - 60 * 60000);
-      const endDateRange = new Date(requestedDate.getTime() + 2 * 60 * 60000);
+
+      // Extract local date and timezone offset directly from the ISO string.
+      // Do NOT use toISOString() here — that converts to UTC and shifts the date
+      // for non-UTC timezones, causing the GHL date-key lookup to miss the day entirely.
+      const requestedDateKey = correctedDateTime.split('T')[0];
+      const tzMatch = correctedDateTime.match(/([+-]\d{2}:\d{2}|Z)$/);
+      const tzOffset = tzMatch ? tzMatch[1] : 'Z';
+
+      // Query the full day in local timezone so GHL date keys align with requestedDateKey
+      const startOfDay = new Date(`${requestedDateKey}T00:00:00${tzOffset}`);
+      const endOfDay = new Date(`${requestedDateKey}T23:59:59${tzOffset}`);
 
       const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
       const params = new URLSearchParams({
-        startDate: startDate.getTime().toString(),
-        endDate: endDateRange.getTime().toString(),
+        startDate: startOfDay.getTime().toString(),
+        endDate: endOfDay.getTime().toString(),
       });
 
       Logger.info(`${logPrefix} Querying GHL Calendar API`, {
         id, calendarId, calendarType,
         requestedTime: requestedDate.toISOString(),
-        queryRange: `${startDate.toISOString()} to ${endDateRange.toISOString()}`,
+        queryRange: `${startOfDay.toISOString()} to ${endOfDay.toISOString()}`,
       });
 
       const response = await this.httpClient.get(`${apiUrl}?${params.toString()}`, {
@@ -844,10 +853,10 @@ export class GHLConnector {
       if (!response.ok) {
         const errorDetails = response.data ? JSON.stringify(response.data) : 'No error details';
         const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
-        Logger.error(`${logPrefix} ${error}`, { 
+        Logger.error(`${logPrefix} ${error}`, {
           id, calendarId,
           apiUrl: `${apiUrl}?${params.toString()}`,
-          requestParams: { startDate: startDate.toISOString(), endDate: endDateRange.toISOString() },
+          requestParams: { startDate: startOfDay.toISOString(), endDate: endOfDay.toISOString() },
           responseData: response.data,
           responseStatus: response.status,
           responseStatusText: response.statusText,
@@ -862,7 +871,7 @@ export class GHLConnector {
         responseDataType: typeof response.data,
       });
 
-      const requestedDateKey = requestedDate.toISOString().split('T')[0];
+      // GHL returns slots organized by date: { "2025-12-23": { "slots": [...] } }
       const dateSlots = requestedDateKey && response.data ? response.data[requestedDateKey] : null;
       const freeSlots = dateSlots?.slots || [];
       
