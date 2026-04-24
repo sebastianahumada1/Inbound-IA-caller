@@ -782,9 +782,12 @@ export class GHLConnector {
                     requestedTime: requestedDate.toISOString(),
                     duration: durationMinutes,
                     calendarType,
+                    freeSlots,
                     message: isAvailable
                         ? `The requested ${calendarType} time slot is available`
-                        : `The requested ${calendarType} time slot is not available`,
+                        : freeSlots.length > 0
+                            ? `The requested ${calendarType} time slot is not available. Available slots for ${requestedDateKey}: ${freeSlots.join(', ')}`
+                            : `The requested ${calendarType} time slot is not available and there are no open slots on ${requestedDateKey}. Please check a different date.`,
                 },
             };
         }
