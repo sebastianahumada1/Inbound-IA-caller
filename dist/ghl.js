@@ -757,16 +757,19 @@ export class GHLConnector {
                 endDate: endDate.toISOString(),
                 endDateTimestamp: endDate.getTime(),
             });
+            // Compare local clock time (HH:MM) extracted directly from the ISO strings,
+            // NOT UTC timestamps. The AI sometimes sends the right clock time but with
+            // the wrong UTC offset (e.g. -04:00 vs -05:00), which shifts the UTC value
+            // by 1 hour even though the intended time is correct. Comparing HH:MM
+            // makes the check offset-agnostic and matches what the user actually said.
+            const requestedHHMM = correctedDateTime.substring(11, 16);
             const isAvailable = freeSlots.some((slotTime) => {
-                const slotDate = new Date(slotTime);
-                const timeDiff = Math.abs(requestedDate.getTime() - slotDate.getTime());
-                const matches = timeDiff < 60000;
+                const slotHHMM = slotTime.substring(11, 16);
+                const matches = requestedHHMM === slotHHMM;
                 Logger.debug(`${logPrefix} Comparing slot`, {
-                    slotTime, slotDate: slotDate.toISOString(),
-                    slotDateTimestamp: slotDate.getTime(),
-                    requestedDate: requestedDate.toISOString(),
-                    requestedDateTimestamp: requestedDate.getTime(),
-                    timeDiffMs: timeDiff, matches,
+                    slotTime, slotHHMM,
+                    requestedHHMM,
+                    matches,
                 });
                 return matches;
             });
