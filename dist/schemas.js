@@ -205,6 +205,18 @@ export const ScheduleCallbackArgsSchema = z.object({
     endTime: z.string().min(1),
     notes: z.string().optional().default(''),
 });
+export const CheckGabrielAvailabilityArgsSchema = z.object({
+    dateTime: z.string().min(1),
+    durationMinutes: z.number().optional().default(30),
+});
+export const ScheduleGabrielArgsSchema = z.object({
+    contactId: z.string().optional(),
+    name: z.string().min(1),
+    phone: z.string().optional(),
+    startTime: z.string().min(1),
+    endTime: z.string().min(1),
+    notes: z.string().optional().default(''),
+});
 // Response schemas
 export const ToolResultSchema = z.object({
     id: z.string(),

@@ -4,7 +4,7 @@ import { Logger } from './utils/logger.js';
 import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
-import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, CheckCallbackAvailabilityArgsSchema, ScheduleCallbackArgsSchema, } from './schemas.js';
+import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, CheckCallbackAvailabilityArgsSchema, ScheduleCallbackArgsSchema, CheckGabrielAvailabilityArgsSchema, ScheduleGabrielArgsSchema, } from './schemas.js';
 export class VapiWebhookHandler {
     ghlConnector;
     vapiApiClient;
@@ -226,6 +226,10 @@ export class VapiWebhookHandler {
                     return await this.handleCheckCallbackAvailability(id, args, callId);
                 case 'schedule_callback':
                     return await this.handleScheduleCallback(id, args, ghlMetadata, callId);
+                case 'check_gabriel_availability':
+                    return await this.handleCheckGabrielAvailability(id, args, callId);
+                case 'schedule_gabriel':
+                    return await this.handleScheduleGabriel(id, args, ghlMetadata, callId);
                 default:
                     Logger.warn('Unknown tool name', { id, name });
                     return {
@@ -389,6 +393,40 @@ export class VapiWebhookHandler {
         catch (error) {
             if (error instanceof ZodError) {
                 Logger.error('Invalid schedule_callback arguments', { id, errors: error.issues });
+                return {
+                    id,
+                    ok: false,
+                    error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+                };
+            }
+            throw error;
+        }
+    }
+    async handleCheckGabrielAvailability(id, args, callId) {
+        try {
+            const validatedArgs = CheckGabrielAvailabilityArgsSchema.parse(args);
+            return await this.ghlConnector.checkGabrielAvailability(id, validatedArgs, callId, this.stateStorage);
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                Logger.error('Invalid check_gabriel_availability arguments', { id, errors: error.issues });
+                return {
+                    id,
+                    ok: false,
+                    error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+                };
+            }
+            throw error;
+        }
+    }
+    async handleScheduleGabriel(id, args, ghlMetadata, callId) {
+        try {
+            const validatedArgs = ScheduleGabrielArgsSchema.parse(args);
+            return await this.ghlConnector.scheduleGabriel(id, validatedArgs, ghlMetadata, callId, this.stateStorage);
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                Logger.error('Invalid schedule_gabriel arguments', { id, errors: error.issues });
                 return {
                     id,
                     ok: false,

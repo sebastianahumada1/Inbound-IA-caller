@@ -987,7 +987,8 @@ export class GHLConnector {
             if (contactPhone) {
                 contactPhone = contactPhone.replace(/\s+/g, '').trim();
             }
-            if (!contactPhone && args.contactId) {
+            const isValidContactId = (cid) => cid.length >= 10 && /^[a-zA-Z0-9]+$/.test(cid);
+            if (!contactPhone && args.contactId && isValidContactId(args.contactId)) {
                 Logger.info(`${logPrefix} Attempting to fetch phone from API`, { id, contactId: args.contactId });
                 try {
                     const contactResponse = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/${args.contactId}`, {
@@ -1057,6 +1058,12 @@ export class GHLConnector {
             }
             // Resolve contactId from multiple sources
             let contactIdToUse = args.contactId;
+            // GHL contact IDs are alphanumeric strings, typically 20+ characters.
+            // Reject obviously invalid values like "lead", "contact", short words, etc.
+            if (contactIdToUse && (contactIdToUse.length < 10 || !/^[a-zA-Z0-9]+$/.test(contactIdToUse))) {
+                Logger.warn(`${logPrefix} Ignoring invalid contactId from args (not a GHL ID)`, { id, contactId: contactIdToUse });
+                contactIdToUse = undefined;
+            }
             if (!contactIdToUse && ghlMetadata) {
                 contactIdToUse = ghlMetadata.contactId || ghlMetadata.contact?.id;
                 if (contactIdToUse) {
