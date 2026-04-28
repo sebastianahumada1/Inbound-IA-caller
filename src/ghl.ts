@@ -831,9 +831,11 @@ export class GHLConnector {
       const endOfDay = new Date(`${requestedDateKey}T23:59:59${tzOffset}`);
 
       const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
+      const timezone = this.assistantId ? ClientConfigManager.getTimezone(this.assistantId) : 'America/Chicago';
       const params = new URLSearchParams({
         startDate: startOfDay.getTime().toString(),
         endDate: endOfDay.getTime().toString(),
+        timezone,
       });
 
       Logger.info(`${logPrefix} Querying GHL Calendar API`, {

@@ -16,6 +16,7 @@ export interface ClientConfig {
   gabrielCalendarId?: string;
   locationId?: string;
   slackChannelId?: string;
+  timezone?: string;
 }
 
 /**
@@ -39,6 +40,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'PREMIER_WELLNESS_CALLBACK_CALENDAR_ID',
         locationIdVar: 'PREMIER_WELLNESS_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS',
+        timezone: 'America/Chicago',
       },
       {
         name: 'West Texas',
@@ -48,6 +50,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'WEST_TEXAS_CALLBACK_CALENDAR_ID',
         locationIdVar: 'WEST_TEXAS_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS',
+        timezone: 'America/Chicago',
       },
       {
         name: 'West Texas Back Neck',
@@ -57,6 +60,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'WEST_TEXAS_BACK_NECK_CALLBACK_CALENDAR_ID',
         locationIdVar: 'WEST_TEXAS_BACK_NECK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS_BACK_NECK',
+        timezone: 'America/Chicago',
       },
       {
         name: 'Jennings',
@@ -66,6 +70,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'THIRD_CLIENT_CALLBACK_CALENDAR_ID',
         locationIdVar: 'THIRD_CLIENT_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_THIRD_CLIENT',
+        timezone: 'America/Chicago',
       },
       {
         name: 'Data Driven Practices',
@@ -75,6 +80,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'DATA_DRIVEN_PRACTICES_CALLBACK_CALENDAR_ID',
         locationIdVar: 'DATA_DRIVEN_PRACTICES_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_DATA_DRIVEN_PRACTICES',
+        timezone: 'America/Chicago',
       },
       {
         name: 'NuVive',
@@ -84,6 +90,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'NUVIVE_CALLBACK_CALENDAR_ID',
         locationIdVar: 'NUVIVE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE',
+        timezone: 'America/Chicago',
       },
       {
         name: 'NuVive Back Neck',
@@ -93,6 +100,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'NUVIVE_BACK_NECK_CALLBACK_CALENDAR_ID',
         locationIdVar: 'NUVIVE_BACK_NECK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NUVIVE_BACK_NECK',
+        timezone: 'America/Chicago',
       },
       {
         name: 'Jennings Back Neck',
@@ -102,6 +110,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'JENNINGS_BACK_NECK_CALLBACK_CALENDAR_ID',
         locationIdVar: 'JENNINGS_BACK_NECK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_JENNINGS_BACK_NECK',
+        timezone: 'America/Chicago',
       },
       {
         name: 'NuWave',
@@ -111,6 +120,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'NUWAVE_CALLBACK_CALENDAR_ID',
         locationIdVar: 'NUWAVE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NUWAVE',
+        timezone: 'America/Chicago',
       },
       {
         name: 'ReliefSource',
@@ -120,6 +130,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'RELIEFSOURCE_CALLBACK_CALENDAR_ID',
         locationIdVar: 'RELIEFSOURCE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_RELIEFSOURCE',
+        timezone: 'America/Chicago',
       },
       {
         name: 'Belden Village',
@@ -129,6 +140,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'BELDEN_VILLAGE_CALLBACK_CALENDAR_ID',
         locationIdVar: 'BELDEN_VILLAGE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_BELDEN_VILLAGE',
+        timezone: 'America/New_York',
       },
       {
         name: 'James Health Center',
@@ -138,6 +150,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'JAMES_HEALTH_CENTER_CALLBACK_CALENDAR_ID',
         locationIdVar: 'JAMES_HEALTH_CENTER_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_JAMES_HEALTH_CENTER',
+        timezone: 'America/Chicago',
       },
       {
         name: 'Amplify Life Baldwin',
@@ -147,6 +160,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'AMPLIFY_LIFE_BALDWIN_CALLBACK_CALENDAR_ID',
         locationIdVar: 'AMPLIFY_LIFE_BALDWIN_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_BALDWIN',
+        timezone: 'America/Chicago',
       },
       {
         name: 'Miami Valley',
@@ -156,6 +170,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'MIAMI_VALLEY_CALLBACK_CALENDAR_ID',
         locationIdVar: 'MIAMI_VALLEY_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY',
+        timezone: 'America/New_York',
       },
       {
         name: 'Northeast',
@@ -165,6 +180,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'NORTHEAST_CALLBACK_CALENDAR_ID',
         locationIdVar: 'NORTHEAST_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_NORTHEAST',
+        timezone: 'America/New_York',
       },
       {
         name: 'Restore Integrated Neuro',
@@ -174,6 +190,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'RESTORE_INTEGRATED_NEURO_CALLBACK_CALENDAR_ID',
         locationIdVar: 'RESTORE_INTEGRATED_NEURO_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_RESTORE_INTEGRATED_NEURO',
+        timezone: 'America/Chicago',
       },
       {
         name: 'Amplify Life Dallas',
@@ -183,6 +200,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'AMPLIFY_LIFE_DALLAS_CALLBACK_CALENDAR_ID',
         locationIdVar: 'AMPLIFY_LIFE_DALLAS_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_DALLAS',
+        timezone: 'America/Chicago',
       },
       {
         name: 'ChiroMedix',
@@ -192,6 +210,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'CHIROMEDIX_CALLBACK_CALENDAR_ID',
         locationIdVar: 'CHIROMEDIX_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_CHIROMEDIX',
+        timezone: 'America/Los_Angeles',
       },
       {
         name: 'Florida Neuropathy & Knee Pain Center',
@@ -201,6 +220,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'BRANDON_BACK_PAIN_RELIEF_CALLBACK_CALENDAR_ID',
         locationIdVar: 'BRANDON_BACK_PAIN_RELIEF_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_BRANDON_BACK_PAIN_RELIEF',
+        timezone: 'America/New_York',
       },
       {
         name: 'Performance Sport and Spine',
@@ -210,6 +230,7 @@ export class ClientConfigManager {
         callbackCalendarIdVar: 'PERFORMANCE_SPORT_AND_SPINE_CALLBACK_CALENDAR_ID',
         locationIdVar: 'PERFORMANCE_SPORT_AND_SPINE_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_PERFORMANCE_SPORT_AND_SPINE',
+        timezone: 'America/Chicago',
       },
       {
         name: 'DDP',
@@ -220,6 +241,7 @@ export class ClientConfigManager {
         gabrielCalendarIdVar: 'DDP_GABRIEL_CALENDAR_ID',
         locationIdVar: 'DDP_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_DDP',
+        timezone: 'America/Chicago',
       },
     ];
 
@@ -283,6 +305,11 @@ export class ClientConfigManager {
       const slackChannel = process.env[clientDef.slackChannelVar];
       if (slackChannel) {
         config.slackChannelId = slackChannel;
+      }
+
+      // Add timezone if defined on the client definition
+      if ((clientDef as any).timezone) {
+        config.timezone = (clientDef as any).timezone;
       }
 
       // Register the configuration
@@ -426,6 +453,14 @@ export class ClientConfigManager {
   static getLocationId(assistantId: string): string | undefined {
     const config = this.getConfigByAssistantId(assistantId);
     return config?.locationId;
+  }
+
+  /**
+   * Get IANA Timezone by Assistant ID (defaults to America/Chicago)
+   */
+  static getTimezone(assistantId: string): string {
+    const config = this.getConfigByAssistantId(assistantId);
+    return config?.timezone || 'America/Chicago';
   }
 
   /**

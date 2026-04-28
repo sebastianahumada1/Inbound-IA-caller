@@ -96,6 +96,26 @@ export class GHLConnector {
         return null;
     }
     /**
+     * Get the Gabriel Calendar ID based on Assistant ID
+     */
+    getGabrielCalendarId() {
+        if (this.assistantId) {
+            const gabrielCalendarId = ClientConfigManager.getGabrielCalendarId(this.assistantId);
+            if (gabrielCalendarId) {
+                Logger.info('[GHL_CONNECTOR] Using client-specific Gabriel calendar ID', {
+                    assistantId: this.assistantId,
+                    clientName: ClientConfigManager.getClientName(this.assistantId),
+                    gabrielCalendarId,
+                });
+                return gabrielCalendarId;
+            }
+        }
+        Logger.warn('[GHL_CONNECTOR] No Gabriel calendar ID found for assistant', {
+            assistantId: this.assistantId,
+        });
+        return null;
+    }
+    /**
      * Extract time mentioned by user from transcript
      * Looks for patterns like "9 AM", "3 PM", "2:30 PM", etc.
      */
@@ -165,6 +185,9 @@ export class GHLConnector {
                         const clientName = ClientConfigManager.getClientName(this.assistantId);
                         if (clientName.includes('Texas') || clientName.includes('West Texas')) {
                             timezone = '-06:00'; // Central Time
+                        }
+                        else if (clientName.includes('ChiroMedix')) {
+                            timezone = '-08:00'; // Pacific Time
                         }
                     }
                     // If AI sent UTC, we need to check if it matches transcript when converted to local time
@@ -711,9 +734,11 @@ export class GHLConnector {
             const startOfDay = new Date(`${requestedDateKey}T00:00:00${tzOffset}`);
             const endOfDay = new Date(`${requestedDateKey}T23:59:59${tzOffset}`);
             const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
+            const timezone = this.assistantId ? ClientConfigManager.getTimezone(this.assistantId) : 'America/Chicago';
             const params = new URLSearchParams({
                 startDate: startOfDay.getTime().toString(),
                 endDate: endOfDay.getTime().toString(),
+                timezone,
             });
             Logger.info(`${logPrefix} Querying GHL Calendar API`, {
                 id, calendarId, calendarType,
@@ -817,6 +842,24 @@ export class GHLConnector {
             return { id, ok: false, error };
         }
         return this.scheduleEventInternal(id, args, callbackCalendarId, 'callback', ghlMetadata, callId, stateStorage);
+    }
+    async checkGabrielAvailability(id, args, callId, stateStorage) {
+        const gabrielCalendarId = this.getGabrielCalendarId();
+        if (!gabrielCalendarId) {
+            const error = 'Gabriel Calendar ID not configured for this client';
+            Logger.error('[GABRIEL] ' + error, { id, assistantId: this.assistantId });
+            return { id, ok: false, error };
+        }
+        return this.checkAvailabilityInternal(id, args.dateTime, args.durationMinutes || 30, gabrielCalendarId, 'appointment', callId, stateStorage);
+    }
+    async scheduleGabriel(id, args, ghlMetadata, callId, stateStorage) {
+        const gabrielCalendarId = this.getGabrielCalendarId();
+        if (!gabrielCalendarId) {
+            const error = 'Gabriel Calendar ID not configured for this client';
+            Logger.error('[GABRIEL] ' + error, { id, assistantId: this.assistantId });
+            return { id, ok: false, error };
+        }
+        return this.scheduleEventInternal(id, args, gabrielCalendarId, 'appointment', ghlMetadata, callId, stateStorage);
     }
     /**
      * Shared logic for scheduling events in GHL (appointment or callback)
