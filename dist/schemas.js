@@ -52,7 +52,8 @@ export const VapiToolCallsMessageSchema = z.object({
     call: z.object({
         id: z.string().optional(),
         assistantId: z.string().optional(),
-    }).optional(),
+        metadata: z.record(z.any()).optional(),
+    }).passthrough().optional(),
 });
 export const VapiCallEndedMessageSchema = z.object({
     type: z.literal('call.ended'),
