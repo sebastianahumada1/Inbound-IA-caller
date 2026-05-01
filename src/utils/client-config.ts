@@ -339,6 +339,35 @@ export class ClientConfigManager {
       }
     }
 
+    // Register Miami Valley Back Inbound as alias of Miami Valley
+    const miamiValleyAssistantId = process.env['MIAMI_VALLEY_ASSISTANT_ID'];
+    const miamiValleyBackInboundAssistantId = process.env['MIAMI_VALLEY_BACK_INBOUND_ASSISTANT_ID'];
+    if (miamiValleyAssistantId && miamiValleyBackInboundAssistantId) {
+      const miamiValleyConfig = this.configs.get(miamiValleyAssistantId);
+      if (miamiValleyConfig && !this.configs.has(miamiValleyBackInboundAssistantId)) {
+        const miamiValleyBackInboundConfig: ClientConfig = {
+          name: 'Miami Valley Back Inbound',
+          assistantId: miamiValleyBackInboundAssistantId,
+          ghlApiKey: miamiValleyConfig.ghlApiKey,
+        };
+        if (miamiValleyConfig.calendarId) miamiValleyBackInboundConfig.calendarId = miamiValleyConfig.calendarId;
+        if (miamiValleyConfig.locationId) miamiValleyBackInboundConfig.locationId = miamiValleyConfig.locationId;
+        if (miamiValleyConfig.slackChannelId) miamiValleyBackInboundConfig.slackChannelId = miamiValleyConfig.slackChannelId;
+
+        this.configs.set(miamiValleyBackInboundAssistantId, miamiValleyBackInboundConfig);
+        configuredClients.push('Miami Valley Back Inbound (alias)');
+
+        Logger.info('[CLIENT_CONFIG] Registered alias: Miami Valley Back Inbound -> Miami Valley', {
+          aliasAssistantId: miamiValleyBackInboundAssistantId.substring(0, 8) + '...',
+          parentAssistantId: miamiValleyAssistantId.substring(0, 8) + '...',
+          hasGhlApiKey: !!miamiValleyBackInboundConfig.ghlApiKey,
+          hasCalendarId: !!miamiValleyBackInboundConfig.calendarId,
+          hasLocationId: !!miamiValleyBackInboundConfig.locationId,
+          hasSlackChannelId: !!miamiValleyBackInboundConfig.slackChannelId,
+        });
+      }
+    }
+
     // Log initialization summary
     if (this.configs.size === 0) {
       Logger.error('[CLIENT_CONFIG] No client configurations loaded! Check environment variables.', {
