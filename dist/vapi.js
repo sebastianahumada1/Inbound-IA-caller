@@ -4,7 +4,9 @@ import { Logger } from './utils/logger.js';
 import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
-import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, CheckCallbackAvailabilityArgsSchema, ScheduleCallbackArgsSchema, CheckGabrielAvailabilityArgsSchema, ScheduleGabrielArgsSchema, } from './schemas.js';
+import { ClientConfigManager } from './utils/client-config.js';
+import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, LookupCallerArgsSchema, SearchContactArgsSchema, } from './schemas.js';
+import { hotProspectorSearchByPhone } from './lib/hotProspector.js';
 export class VapiWebhookHandler {
     ghlConnector;
     vapiApiClient;
@@ -131,6 +133,7 @@ export class VapiWebhookHandler {
                 // GHL sends metadata.ghl.contactId when it triggers Vapi
                 const ghlMetadata = message.call?.metadata?.ghl || null;
                 const callId = message.call?.id;
+                const customerPhone = message.call?.customer?.number || null;
                 Logger.info('[VAPI] Extracted GHL metadata for tool-calls', {
                     callId,
                     hasGhlMetadata: !!ghlMetadata,
@@ -142,7 +145,7 @@ export class VapiWebhookHandler {
                     contactPhoneNumber: ghlMetadata?.contact?.phoneNumber,
                     fullGhlMetadata: JSON.stringify(ghlMetadata).substring(0, 500),
                 });
-                return await this.handleToolCalls(message.toolCallList, assistantId, ghlMetadata, callId);
+                return await this.handleToolCalls(message.toolCallList, assistantId, ghlMetadata, callId, customerPhone);
             case 'call.ended':
                 return this.handleCallEnded(message);
             case 'end-of-call-report':
@@ -155,6 +158,15 @@ export class VapiWebhookHandler {
                 return this.handleMetadata(message);
             case 'ghl_tool':
                 return await this.handleGhlTool(message);
+            case 'assistant.started':
+                Logger.info('[WEBHOOK] Assistant started', {
+                    callId: message.call?.id,
+                    assistantName: message.newAssistant?.name || message.assistant?.name,
+                });
+                return {
+                    ok: true,
+                    message: 'Assistant started acknowledged',
+                };
             default:
                 Logger.warn('Unknown message type', { type: message.type });
                 return {
@@ -163,7 +175,7 @@ export class VapiWebhookHandler {
                 };
         }
     }
-    async handleToolCalls(toolCallList, assistantId, ghlMetadata, callId) {
+    async handleToolCalls(toolCallList, assistantId, ghlMetadata, callId, customerPhone) {
         Logger.info('Processing tool calls', {
             count: toolCallList.length,
             assistantId,
@@ -177,7 +189,7 @@ export class VapiWebhookHandler {
         const vapiResults = [];
         // Process tool calls sequentially to avoid overwhelming GHL
         for (const toolCall of toolCallList) {
-            const result = await this.dispatchToolCall(toolCall, ghlMetadata, callId);
+            const result = await this.dispatchToolCall(toolCall, ghlMetadata, callId, assistantId, customerPhone);
             // Convert to Vapi format: toolCallId and result (as string)
             let resultString;
             if (result.ok) {
@@ -203,7 +215,7 @@ export class VapiWebhookHandler {
             results: vapiResults,
         };
     }
-    async dispatchToolCall(toolCall, ghlMetadata, callId) {
+    async dispatchToolCall(toolCall, ghlMetadata, callId, assistantId, customerPhone) {
         const { id, name, arguments: args } = toolCall;
         Logger.info('Dispatching tool call', { id, name, callId, args, hasGhlMetadata: !!ghlMetadata });
         try {
@@ -219,17 +231,17 @@ export class VapiWebhookHandler {
                 case 'update_stage':
                     return await this.handleUpdateStage(id, args);
                 case 'check_calendar_availability':
+                case 'check_calendar_availability_inbound':
                     return await this.handleCheckCalendarAvailability(id, args, callId);
                 case 'schedule_appointment':
+                case 'schedule_appointment_inbound':
                     return await this.handleScheduleAppointment(id, args, ghlMetadata, callId);
-                case 'check_callback_availability':
-                    return await this.handleCheckCallbackAvailability(id, args, callId);
-                case 'schedule_callback':
-                    return await this.handleScheduleCallback(id, args, ghlMetadata, callId);
-                case 'check_gabriel_availability':
-                    return await this.handleCheckGabrielAvailability(id, args, callId);
-                case 'schedule_gabriel':
-                    return await this.handleScheduleGabriel(id, args, ghlMetadata, callId);
+                case 'lookup_caller':
+                    return await this.handleLookupCaller(id, args, callId, customerPhone);
+                case 'search_contact':
+                case 'premier_inbound_contactid':
+                case 'inbound_contactid':
+                    return await this.handleSearchContact(id, args, callId, assistantId);
                 default:
                     Logger.warn('Unknown tool name', { id, name });
                     return {
@@ -368,73 +380,271 @@ export class VapiWebhookHandler {
             throw error;
         }
     }
-    async handleCheckCallbackAvailability(id, args, callId) {
+    // ── HotProspector Lookup Tool ──────────────────────────────────────
+    async handleLookupCaller(id, args, callId, customerPhone) {
         try {
-            const validatedArgs = CheckCallbackAvailabilityArgsSchema.parse(args);
-            return await this.ghlConnector.checkCallbackAvailability(id, validatedArgs, callId, this.stateStorage);
+            const validatedArgs = LookupCallerArgsSchema.parse(args);
+            // Always prefer the real caller phone from VAPI call data.
+            // The AI frequently sends incomplete numbers (e.g. "+1") because it
+            // doesn't know the caller's full number — the server does.
+            let phone = customerPhone || validatedArgs.phone;
+            if (!phone) {
+                Logger.warn('[LOOKUP_CALLER] No phone number available', { callId });
+                return {
+                    id,
+                    ok: true,
+                    data: { found: false, callerType: 'unknown', message: 'No phone number available for lookup.' },
+                };
+            }
+            Logger.info('[LOOKUP_CALLER] Looking up caller in HotProspector', {
+                toolCallId: id,
+                callId,
+                phone,
+                aiPhone: validatedArgs.phone,
+                usedRealCallerPhone: !!customerPhone,
+            });
+            const hpResult = await hotProspectorSearchByPhone(phone);
+            if (!hpResult.ok || hpResult.count === 0 || !hpResult.lead) {
+                Logger.info('[LOOKUP_CALLER] No lead found', { callId, phone });
+                return {
+                    id,
+                    ok: true,
+                    data: {
+                        found: false,
+                        callerType: 'unknown',
+                        phone,
+                        message: 'No record found for this phone number.',
+                    },
+                };
+            }
+            const lead = hpResult.lead;
+            const fullName = `${lead.Firstname ?? ''} ${lead.Lastname ?? ''}`.trim();
+            const mobile = lead.Mobile ?? lead.Phone ?? '';
+            const cc = lead.CountryCode ?? '+1';
+            const fullPhone = mobile.startsWith('+') ? mobile : `${cc}${mobile}`;
+            const cf = lead.Lead_Custom_Fields;
+            // Validate that the HP result actually belongs to the caller.
+            // HP's SearchByUserInput can return arbitrary results when no exact
+            // match exists. Compare trailing digits (last 10) to catch both US
+            // and international formats.
+            const callerDigits = phone.replace(/\D/g, '');
+            const leadDigits = mobile.replace(/\D/g, '');
+            if (callerDigits && leadDigits) {
+                const compareLen = Math.min(callerDigits.length, leadDigits.length, 10);
+                const callerSuffix = callerDigits.slice(-compareLen);
+                const leadSuffix = leadDigits.slice(-compareLen);
+                if (callerSuffix !== leadSuffix) {
+                    Logger.warn('[LOOKUP_CALLER] HP result phone does not match caller — discarding', {
+                        callId,
+                        callerPhone: phone,
+                        leadPhone: mobile,
+                        leadName: fullName,
+                    });
+                    return {
+                        id,
+                        ok: true,
+                        data: {
+                            found: false,
+                            callerType: 'unknown',
+                            phone,
+                            message: 'No record found for this phone number.',
+                        },
+                    };
+                }
+            }
+            // Build a flat data object the agent can consume directly
+            const leadData = {
+                found: true,
+                callerType: 'known',
+                // Core contact info
+                leadId: lead.LeadId ?? '',
+                firstName: lead.Firstname ?? '',
+                lastName: lead.Lastname ?? '',
+                fullName,
+                email: lead['E-Mail'] ?? '',
+                phone: fullPhone,
+                mobile: lead.Mobile ?? '',
+                countryCode: lead.CountryCode ?? '',
+                // Location / Group
+                locationId: lead.LocationId ?? '',
+                groupId: lead.GroupId ?? '',
+                tags: lead.Tags ?? '',
+                // Address
+                city: lead.City ?? '',
+                state: lead.State ?? '',
+                zipcode: lead.Zipcode ?? '',
+                address: lead.Address ?? '',
+                company: lead.Company ?? '',
+            };
+            // Custom fields (appointment, medical, etc.)
+            if (cf) {
+                leadData.appointmentDate = cf.appointment_date ?? '';
+                leadData.appointmentTime = cf.appointment_time ?? '';
+                leadData.callCount = cf.call_count ?? '';
+                leadData.painLocation = this.stringifyField(cf.where_is_your_pain_located);
+                leadData.hasMri = cf.have_you_had_an_mri ?? '';
+                leadData.reasonableCommute =
+                    cf.is__custom_valuescity__a_reasonable_commute_for_you ?? '';
+                leadData.doctorVisit = this.stringifyField(cf.have_you_seen_a_doctor_for_your_pain_if_so_what_did_they_tell_you_);
+                leadData.triedTreatments = this.stringifyField(cf.have_you_tried_procedures_or_treatments_for_your_pain);
+                leadData.symptoms = this.stringifyField(cf.describe_your_symptoms_check_all_that_apply);
+                leadData.takingMedications =
+                    cf.are_you_currently_taking_medications_for_your_pain ?? '';
+                leadData.painDuration =
+                    cf.how_long_have_you_been_suffering_from_back_pain_disc_pain_or_sciatica ?? '';
+                leadData.sopLink = cf.back__neck_sop_link ?? '';
+            }
+            Logger.info('[LOOKUP_CALLER] Lead found, returning data to agent', {
+                callId,
+                leadId: lead.LeadId,
+                firstName: lead.Firstname,
+                fieldCount: Object.keys(leadData).length,
+            });
+            // Persist lead info so end-of-call-report can use it for Slack notification
+            if (callId) {
+                const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+                await this.stateStorage.storeCallMetadata(callId, {
+                    ...existing,
+                    firstName: lead.Firstname ?? '',
+                    lastName: lead.Lastname ?? '',
+                    email: lead['E-Mail'] ?? '',
+                    phone: fullPhone,
+                    locationId: lead.LocationId ?? '',
+                });
+            }
+            return {
+                id,
+                ok: true,
+                data: leadData,
+            };
         }
         catch (error) {
             if (error instanceof ZodError) {
-                Logger.error('Invalid check_callback_availability arguments', { id, errors: error.issues });
+                Logger.error('[LOOKUP_CALLER] Invalid arguments', { id, errors: error.issues });
                 return {
                     id,
                     ok: false,
                     error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
                 };
             }
-            throw error;
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[LOOKUP_CALLER] Error during lookup', { id, callId, error: errorMessage });
+            return {
+                id,
+                ok: false,
+                error: `Lookup failed: ${errorMessage}`,
+            };
         }
     }
-    async handleScheduleCallback(id, args, ghlMetadata, callId) {
+    // ── GHL Contact Search Tool ─────────────────────────────────────────
+    async handleSearchContact(id, args, callId, assistantId) {
         try {
-            const validatedArgs = ScheduleCallbackArgsSchema.parse(args);
-            return await this.ghlConnector.scheduleCallback(id, validatedArgs, ghlMetadata, callId, this.stateStorage);
+            const validatedArgs = SearchContactArgsSchema.parse(args);
+            const { query } = validatedArgs;
+            Logger.info('[SEARCH_CONTACT] Searching contact in GHL', {
+                toolCallId: id,
+                callId,
+                assistantId,
+                query,
+            });
+            // Resolve credentials: client-specific first, then env fallback
+            const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId))
+                || process.env.GHL_API_KEY;
+            const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId))
+                || process.env.GHL_LOCATION_ID;
+            Logger.info('[SEARCH_CONTACT] Resolved credentials', {
+                callId,
+                source: assistantId && ClientConfigManager.isConfigured(assistantId) ? 'client-config' : 'env',
+                hasApiKey: !!apiKey,
+                hasLocationId: !!locationId,
+            });
+            if (!apiKey) {
+                Logger.error('[SEARCH_CONTACT] No GHL API key available');
+                return { id, ok: false, error: 'GHL API key not configured' };
+            }
+            if (!locationId) {
+                Logger.error('[SEARCH_CONTACT] No GHL Location ID available');
+                return { id, ok: false, error: 'GHL Location ID not configured' };
+            }
+            const url = `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${encodeURIComponent(query)}`;
+            const resp = await fetch(url, {
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Version': '2021-07-28',
+                },
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                Logger.error('[SEARCH_CONTACT] GHL API error', { status: resp.status, data });
+                return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+            }
+            const contact = data.contacts?.[0];
+            if (!contact) {
+                Logger.info('[SEARCH_CONTACT] No contact found', { callId, query });
+                return {
+                    id,
+                    ok: true,
+                    data: {
+                        found: false,
+                        query,
+                        message: `No contact found for: ${query}`,
+                    },
+                };
+            }
+            Logger.info('[SEARCH_CONTACT] Contact found', {
+                callId,
+                contactId: contact.id,
+                name: contact.firstName,
+            });
+            // Persist contactId so end-of-call-report can build the GHL link
+            if (callId) {
+                const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+                await this.stateStorage.storeCallMetadata(callId, {
+                    ...existing,
+                    contactId: contact.id,
+                    firstName: existing.firstName || contact.firstName || '',
+                    lastName: existing.lastName || contact.lastName || '',
+                    email: existing.email || contact.email || '',
+                    phone: existing.phone || contact.phone || '',
+                });
+            }
+            return {
+                id,
+                ok: true,
+                data: {
+                    found: true,
+                    contactId: contact.id,
+                    firstName: contact.firstName ?? '',
+                    lastName: contact.lastName ?? '',
+                    name: `${contact.firstName ?? ''} ${contact.lastName ?? ''}`.trim(),
+                    email: contact.email ?? '',
+                    phone: contact.phone ?? '',
+                },
+            };
         }
         catch (error) {
             if (error instanceof ZodError) {
-                Logger.error('Invalid schedule_callback arguments', { id, errors: error.issues });
+                Logger.error('[SEARCH_CONTACT] Invalid arguments', { id, errors: error.issues });
                 return {
                     id,
                     ok: false,
                     error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
                 };
             }
-            throw error;
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[SEARCH_CONTACT] Error during search', { id, callId, error: errorMessage });
+            return { id, ok: false, error: `Search failed: ${errorMessage}` };
         }
     }
-    async handleCheckGabrielAvailability(id, args, callId) {
-        try {
-            const validatedArgs = CheckGabrielAvailabilityArgsSchema.parse(args);
-            return await this.ghlConnector.checkGabrielAvailability(id, validatedArgs, callId, this.stateStorage);
-        }
-        catch (error) {
-            if (error instanceof ZodError) {
-                Logger.error('Invalid check_gabriel_availability arguments', { id, errors: error.issues });
-                return {
-                    id,
-                    ok: false,
-                    error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
-                };
-            }
-            throw error;
-        }
-    }
-    async handleScheduleGabriel(id, args, ghlMetadata, callId) {
-        try {
-            const validatedArgs = ScheduleGabrielArgsSchema.parse(args);
-            return await this.ghlConnector.scheduleGabriel(id, validatedArgs, ghlMetadata, callId, this.stateStorage);
-        }
-        catch (error) {
-            if (error instanceof ZodError) {
-                Logger.error('Invalid schedule_gabriel arguments', { id, errors: error.issues });
-                return {
-                    id,
-                    ok: false,
-                    error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
-                };
-            }
-            throw error;
-        }
+    /** Safely convert a value that might be a string or array to a readable string. */
+    stringifyField(value) {
+        if (value === null || value === undefined)
+            return '';
+        if (typeof value === 'string')
+            return value;
+        if (Array.isArray(value))
+            return value.join(', ');
+        return String(value);
     }
     handleCallEnded(message) {
         Logger.info('Call ended', {
@@ -449,6 +659,11 @@ export class VapiWebhookHandler {
     async handleEndOfCallReport(message) {
         const recordingUrl = message.call?.recordingUrl || message.recordingUrl;
         const assistantId = message.call?.assistantId;
+        // Support both legacy summaryPlan and new structured output ("Call Summary" schema)
+        // Note: structured outputs are NOT in the webhook — they are fetched from the VAPI API below
+        let callSummary = message.analysis?.summary ||
+            message.analysis?.['Call Summary'] ||
+            undefined;
         Logger.info('End of call report received', {
             callId: message.call?.id,
             assistantId,
@@ -468,11 +683,11 @@ export class VapiWebhookHandler {
             });
         }
         // Store the summary from end-of-call-report if available
-        if (message.call?.id && message.analysis?.summary) {
-            await this.stateStorage.storeCallSummary(message.call.id, message.analysis.summary);
+        if (message.call?.id && callSummary) {
+            await this.stateStorage.storeCallSummary(message.call.id, callSummary);
             Logger.info('[END_OF_CALL] Summary stored in persistent storage', {
                 callId: message.call.id,
-                summaryLength: message.analysis.summary.length,
+                summaryLength: callSummary.length,
             });
         }
         // Upload recording to Slack IMMEDIATELY (await for Vercel serverless)
@@ -496,20 +711,29 @@ export class VapiWebhookHandler {
                     hasMessageMetadata: !!message.call?.metadata,
                     hasGhlInMessage: !!ghlMetadata,
                 });
-                // If not available in webhook, try pulling from API
+                // Always pull from API to get structured outputs (summary); also get GHL metadata if missing
+                let apiFetched = false;
                 if (!ghlMetadata) {
                     try {
                         Logger.info('[END_OF_CALL] Pulling metadata from API', { callId: message.call.id });
                         const metadataResult = await this.pullCallMetadata(message.call.id);
                         ghlMetadata = metadataResult.ghlMetadata;
                         fullCallData = metadataResult.fullCall || fullCallData;
+                        apiFetched = true;
+                        // Use structured output summary if no summary from webhook
+                        if (!callSummary && metadataResult.structuredSummary) {
+                            callSummary = metadataResult.structuredSummary;
+                            Logger.info('[END_OF_CALL] Summary from structured outputs', {
+                                callId: message.call.id,
+                                summaryLength: metadataResult.structuredSummary.length,
+                            });
+                        }
                         Logger.info('[END_OF_CALL] DEBUG - Metadata fetched from API', {
                             callId: message.call.id,
                             hasGhlMetadata: !!ghlMetadata,
                             hasFullCallData: !!fullCallData,
+                            hasStructuredSummary: !!metadataResult.structuredSummary,
                             ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
-                            fullCallDataKeys: fullCallData ? Object.keys(fullCallData) : [],
-                            fullCallMetadataKeys: fullCallData?.metadata ? Object.keys(fullCallData.metadata) : [],
                             rawGhlMetadata: ghlMetadata ? JSON.stringify(ghlMetadata).substring(0, 500) : null,
                         });
                     }
@@ -520,13 +744,106 @@ export class VapiWebhookHandler {
                         });
                     }
                 }
+                // If ghlMetadata came from webhook but no summary yet, fetch API just for structured outputs
+                if (!apiFetched && !callSummary) {
+                    try {
+                        const metadataResult = await this.pullCallMetadata(message.call.id);
+                        if (metadataResult.structuredSummary) {
+                            callSummary = metadataResult.structuredSummary;
+                            Logger.info('[END_OF_CALL] Summary from structured outputs (secondary fetch)', {
+                                callId: message.call.id,
+                                summaryLength: metadataResult.structuredSummary.length,
+                            });
+                        }
+                    }
+                    catch (error) {
+                        Logger.warn('[END_OF_CALL] Could not fetch structured outputs', {
+                            callId: message.call.id,
+                            error: error instanceof Error ? error.message : 'Unknown error',
+                        });
+                    }
+                }
+                // If still no GHL metadata, check stateStorage for data captured during tool calls
+                if (!ghlMetadata) {
+                    try {
+                        const storedMetadata = await this.stateStorage.getCallMetadata(message.call.id);
+                        if (storedMetadata?.contactId || storedMetadata?.firstName) {
+                            ghlMetadata = {
+                                contactId: storedMetadata.contactId || null,
+                                locationId: storedMetadata.locationId || null,
+                                contact: {
+                                    firstName: storedMetadata.firstName || '',
+                                    lastName: storedMetadata.lastName || '',
+                                    name: `${storedMetadata.firstName || ''} ${storedMetadata.lastName || ''}`.trim(),
+                                    email: storedMetadata.email || '',
+                                    phone: storedMetadata.phone || '',
+                                },
+                            };
+                            Logger.info('[END_OF_CALL] Built ghlMetadata from stateStorage tool call data', {
+                                callId: message.call.id,
+                                contactId: ghlMetadata.contactId,
+                                firstName: storedMetadata.firstName,
+                            });
+                        }
+                    }
+                    catch (error) {
+                        Logger.warn('[END_OF_CALL] Could not read stateStorage metadata', {
+                            callId: message.call.id,
+                            error: error instanceof Error ? error.message : 'Unknown error',
+                        });
+                    }
+                }
+                // Last resort: look up caller phone directly in GHL
+                if (!ghlMetadata) {
+                    const callerPhone = message.call?.customer?.number;
+                    if (callerPhone) {
+                        try {
+                            Logger.info('[END_OF_CALL] Looking up caller by phone in GHL', {
+                                callId: message.call.id,
+                                phone: '***' + callerPhone.slice(-4),
+                            });
+                            const contactResult = await this.ghlConnector.lookupContactByPhone(callerPhone);
+                            if (contactResult) {
+                                ghlMetadata = contactResult;
+                                Logger.info('[END_OF_CALL] GHL contact found via phone lookup', {
+                                    callId: message.call.id,
+                                    contactId: contactResult.contactId,
+                                });
+                            }
+                        }
+                        catch (error) {
+                            Logger.warn('[END_OF_CALL] GHL phone lookup failed', {
+                                callId: message.call.id,
+                                error: error instanceof Error ? error.message : 'Unknown error',
+                            });
+                        }
+                    }
+                }
                 await this.uploadRecordingToSlack(recordingUrl, message.call.id, assistantId, ghlMetadata, fullCallData, {
                     duration: message.duration,
                     cost: message.cost,
-                    summary: message.analysis?.summary,
+                    ...(callSummary !== undefined && { summary: callSummary }),
                     sentiment: message.analysis?.sentiment,
                 });
                 Logger.info('[END_OF_CALL] Recording uploaded to Slack successfully', { callId: message.call.id });
+                // Send summary note to GHL contact if we have a contactId
+                const contactId = ghlMetadata?.contactId || ghlMetadata?.contact?.id;
+                if (contactId) {
+                    try {
+                        // Store summary so sendFinalSummaryNote can read it
+                        if (callSummary) {
+                            await this.stateStorage.storeCallSummary(message.call.id, callSummary);
+                        }
+                        await this.sendFinalSummaryNote(message.call.id, { contactId, metadata: ghlMetadata });
+                        Logger.info('[END_OF_CALL] Summary note sent to GHL', { callId: message.call.id, contactId });
+                    }
+                    catch (error) {
+                        Logger.error('[END_OF_CALL] Failed to send summary note', {
+                            callId: message.call.id,
+                            error: error instanceof Error ? error.message : 'Unknown error',
+                        });
+                    }
+                }
             }
             catch (error) {
                 Logger.error('[SLACK_UPLOAD] Failed to upload recording', {

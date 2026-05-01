@@ -78,9 +78,6 @@ export class SlackService {
             // Get client name from assistant ID
             const clientName = assistantId ? ClientConfigManager.getClientName(assistantId) : 'Unknown Client';
             // DEBUG: Log all available data structures
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/45188c02-e418-44d6-9c05-ffe9db4a986c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'slack-service.ts:116', message: 'Data structures for name extraction', data: { callId, ghlMetadata: ghlMetadata ? { contact: ghlMetadata.contact } : null, fullCallData: fullCallData ? { variables: fullCallData.variables, variableValues: fullCallData.variableValues, metadata: fullCallData.metadata } : null }, hypothesisId: 'H1', timestamp: Date.now() }) }).catch(() => { });
-            // #endregion
             Logger.info('[SLACK_SERVICE] DEBUG - Available data structures', {
                 callId,
                 hasGhlMetadata: !!ghlMetadata,
@@ -115,69 +112,42 @@ export class SlackService {
                     rawMetadata: fullCallData.metadata ? JSON.stringify(fullCallData.metadata).substring(0, 500) : null,
                 } : null,
             });
-            // Extract first name and last name (GHL firstName/lastName first, then split "name" when needed)
+            // Extract first name from multiple possible sources (priority order)
             let leadFirstName = 'N/A';
-            let leadLastName = 'N/A';
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/45188c02-e418-44d6-9c05-ffe9db4a986c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'slack-service.ts:154', message: 'Before name extraction logic', data: { ghlFirstName: ghlMetadata?.contact?.firstName, ghlLastName: ghlMetadata?.contact?.lastName, vapiName: fullCallData?.variables?.name }, hypothesisId: 'H2', timestamp: Date.now() }) }).catch(() => { });
-            // #endregion
-            if (ghlMetadata?.contact?.firstName) {
-                leadFirstName = ghlMetadata.contact.firstName;
-                leadLastName = ghlMetadata.contact.lastName || 'N/A';
-            }
-            else if (fullCallData?.variables?.name) {
-                const nameParts = fullCallData.variables.name.split(' ');
-                leadFirstName = nameParts[0] || 'N/A';
-                leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+            if (fullCallData?.variables?.name) {
+                leadFirstName = fullCallData.variables.name;
             }
             else if (fullCallData?.variableValues?.name) {
-                const nameParts = fullCallData.variableValues.name.split(' ');
-                leadFirstName = nameParts[0] || 'N/A';
-                leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+                leadFirstName = fullCallData.variableValues.name;
             }
             else if (fullCallData?.assistantOverrides?.variableValues?.name) {
-                const nameParts = fullCallData.assistantOverrides.variableValues.name.split(' ');
-                leadFirstName = nameParts[0] || 'N/A';
-                leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+                leadFirstName = fullCallData.assistantOverrides.variableValues.name;
             }
             else if (ghlMetadata?.contact?.name) {
-                const nameParts = ghlMetadata.contact.name.split(' ');
-                leadFirstName = nameParts[0] || 'N/A';
-                leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+                leadFirstName = ghlMetadata.contact.name;
             }
             else if (fullCallData?.metadata?.name) {
-                const nameParts = fullCallData.metadata.name.split(' ');
-                leadFirstName = nameParts[0] || 'N/A';
-                leadLastName = nameParts.slice(1).join(' ') || 'N/A';
+                leadFirstName = fullCallData.metadata.name;
             }
-            else {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/45188c02-e418-44d6-9c05-ffe9db4a986c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'slack-service.ts:182', message: 'Entering fallback name extraction', data: { variables: fullCallData?.variables, variableValues: fullCallData?.variableValues }, hypothesisId: 'H3', timestamp: Date.now() }) }).catch(() => { });
-                // #endregion
-                if (fullCallData?.variables?.name)
-                    leadFirstName = fullCallData.variables.name;
-                else if (fullCallData?.variableValues?.name)
-                    leadFirstName = fullCallData.variableValues.name;
-                else if (fullCallData?.assistantOverrides?.variableValues?.name)
-                    leadFirstName = fullCallData.assistantOverrides.variableValues.name;
-                else if (ghlMetadata?.contact?.name)
-                    leadFirstName = ghlMetadata.contact.name;
-                else if (fullCallData?.metadata?.name)
-                    leadFirstName = fullCallData.metadata.name;
-                leadLastName = fullCallData?.variables?.lastName
-                    || fullCallData?.variableValues?.lastName
-                    || fullCallData?.assistantOverrides?.variableValues?.lastName
-                    || ghlMetadata?.contact?.lastName
-                    || fullCallData?.metadata?.lastName
-                    || 'N/A';
+            else if (ghlMetadata?.contact?.firstName) {
+                leadFirstName = ghlMetadata.contact.firstName;
             }
+            // Extract last name from multiple sources
+            const leadLastName = fullCallData?.variables?.lastName
+                || fullCallData?.variableValues?.lastName
+                || fullCallData?.assistantOverrides?.variableValues?.lastName
+                || ghlMetadata?.contact?.lastName
+                || fullCallData?.metadata?.lastName
+                || 'N/A';
             // Extract contactId from GHL metadata
             const contactId = ghlMetadata?.contactId
                 || ghlMetadata?.contact?.id
                 || fullCallData?.metadata?.ghl?.contactId
                 || null;
-            // Get locationId from client config
-            const locationId = assistantId ? ClientConfigManager.getLocationId(assistantId) : null;
+            // Get locationId from client config or ghlMetadata (HotProspector provides it)
+            const locationId = (assistantId ? ClientConfigManager.getLocationId(assistantId) : null)
+                || ghlMetadata?.locationId
+                || null;
             // Build GHL contact link if we have both contactId and locationId
             const ghlContactLink = (contactId && locationId)
                 ? `https://app.gohighlevel.com/v2/location/${locationId}/contacts/detail/${contactId}`
@@ -208,9 +178,6 @@ export class SlackService {
                 locationId,
                 ghlContactLink,
             });
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/45188c02-e418-44d6-9c05-ffe9db4a986c', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'slack-service.ts:237', message: 'Final extracted names', data: { leadFirstName, leadLastName }, hypothesisId: 'H4', timestamp: Date.now() }) }).catch(() => { });
-            // #endregion
             // Format date: YYYY-MM-DD HH:MM:SS
             const now = new Date();
             const year = now.getFullYear();
@@ -220,21 +187,12 @@ export class SlackService {
             const minutes = String(now.getMinutes()).padStart(2, '0');
             const seconds = String(now.getSeconds()).padStart(2, '0');
             const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-            // Build full name: combine first + last, omitting "N/A" parts
-            let leadFullName = 'N/A';
-            if (leadFirstName !== 'N/A' && leadLastName !== 'N/A') {
-                leadFullName = `${leadFirstName} ${leadLastName}`;
-            }
-            else if (leadFirstName !== 'N/A') {
-                leadFullName = leadFirstName;
-            }
-            else if (leadLastName !== 'N/A') {
-                leadFullName = leadLastName;
-            }
+            // Build full name
+            const fullName = [leadFirstName, leadLastName].filter(n => n && n !== 'N/A').join(' ') || 'N/A';
             // Build the message with exact format requested
             let message = `<!channel> New Call Recording & Report Just Dropped\n\n`;
             message += `*Practice Name:* ${clientName}\n`;
-            message += `*Name:* ${leadFullName}\n`;
+            message += `*Name:* ${fullName}\n`;
             message += `*Email:* ${leadEmail}\n`;
             message += `*Phone:* ${leadPhone}\n`;
             message += `*GHL Contact:* ${ghlContactLink}\n`;

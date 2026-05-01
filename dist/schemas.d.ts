@@ -374,6 +374,52 @@ export declare const VapiGhlToolMessageSchema: z.ZodObject<{
     timestamp?: number | undefined;
     metadata?: Record<string, any> | undefined;
 }>;
+export declare const VapiAssistantStartedMessageSchema: z.ZodObject<{
+    type: z.ZodLiteral<"assistant.started">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+    type: z.ZodLiteral<"assistant.started">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+    type: z.ZodLiteral<"assistant.started">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, z.ZodTypeAny, "passthrough">>;
 export declare const VapiWebhookMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
     type: z.ZodLiteral<"tool-calls">;
     toolCallList: z.ZodArray<z.ZodEffects<z.ZodObject<{
@@ -695,7 +741,52 @@ export declare const VapiWebhookMessageSchema: z.ZodDiscriminatedUnion<"type", [
     } | undefined;
     timestamp?: number | undefined;
     metadata?: Record<string, any> | undefined;
-}>]>;
+}>, z.ZodObject<{
+    type: z.ZodLiteral<"assistant.started">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+    type: z.ZodLiteral<"assistant.started">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+    type: z.ZodLiteral<"assistant.started">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, z.ZodTypeAny, "passthrough">>]>;
 export declare const VapiWebhookBodySchema: z.ZodObject<{
     message: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
         type: z.ZodLiteral<"tool-calls">;
@@ -1018,7 +1109,52 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
         } | undefined;
         timestamp?: number | undefined;
         metadata?: Record<string, any> | undefined;
-    }>]>;
+    }>, z.ZodObject<{
+        type: z.ZodLiteral<"assistant.started">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        type: z.ZodLiteral<"assistant.started">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        type: z.ZodLiteral<"assistant.started">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, z.ZodTypeAny, "passthrough">>]>;
 }, "strip", z.ZodTypeAny, {
     message: {
         type: "tool-calls";
@@ -1094,7 +1230,22 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
         } | undefined;
         timestamp?: number | undefined;
         metadata?: Record<string, any> | undefined;
-    };
+    } | z.objectOutputType<{
+        type: z.ZodLiteral<"assistant.started">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, z.ZodTypeAny, "passthrough">;
 }, {
     message: {
         type: "tool-calls";
@@ -1175,7 +1326,22 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
         } | undefined;
         timestamp?: number | undefined;
         metadata?: Record<string, any> | undefined;
-    };
+    } | z.objectInputType<{
+        type: z.ZodLiteral<"assistant.started">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        newAssistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, z.ZodTypeAny, "passthrough">;
 }>;
 export declare const SendSmsArgsSchema: z.ZodObject<{
     phone: z.ZodString;
@@ -1355,37 +1521,19 @@ export declare const ScheduleAppointmentArgsSchema: z.ZodObject<{
     contactId?: string | undefined;
     notes?: string | undefined;
 }>;
-export declare const CheckCallbackAvailabilityArgsSchema: z.ZodObject<{
-    dateTime: z.ZodString;
-    durationMinutes: z.ZodDefault<z.ZodOptional<z.ZodNumber>>;
+export declare const LookupCallerArgsSchema: z.ZodObject<{
+    phone: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    dateTime: string;
-    durationMinutes: number;
+    phone: string;
 }, {
-    dateTime: string;
-    durationMinutes?: number | undefined;
+    phone: string;
 }>;
-export declare const ScheduleCallbackArgsSchema: z.ZodObject<{
-    contactId: z.ZodOptional<z.ZodString>;
-    name: z.ZodString;
-    phone: z.ZodOptional<z.ZodString>;
-    startTime: z.ZodString;
-    endTime: z.ZodString;
-    notes: z.ZodDefault<z.ZodOptional<z.ZodString>>;
+export declare const SearchContactArgsSchema: z.ZodObject<{
+    query: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    name: string;
-    startTime: string;
-    endTime: string;
-    notes: string;
-    phone?: string | undefined;
-    contactId?: string | undefined;
+    query: string;
 }, {
-    name: string;
-    startTime: string;
-    endTime: string;
-    phone?: string | undefined;
-    contactId?: string | undefined;
-    notes?: string | undefined;
+    query: string;
 }>;
 export declare const ToolResultSchema: z.ZodObject<{
     id: z.ZodString;
@@ -1450,7 +1598,7 @@ export type AddNoteArgs = z.infer<typeof AddNoteArgsSchema>;
 export type UpdateStageArgs = z.infer<typeof UpdateStageArgsSchema>;
 export type CheckCalendarAvailabilityArgs = z.infer<typeof CheckCalendarAvailabilityArgsSchema>;
 export type ScheduleAppointmentArgs = z.infer<typeof ScheduleAppointmentArgsSchema>;
-export type CheckCallbackAvailabilityArgs = z.infer<typeof CheckCallbackAvailabilityArgsSchema>;
-export type ScheduleCallbackArgs = z.infer<typeof ScheduleCallbackArgsSchema>;
+export type LookupCallerArgs = z.infer<typeof LookupCallerArgsSchema>;
+export type SearchContactArgs = z.infer<typeof SearchContactArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;

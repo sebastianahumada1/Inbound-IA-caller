@@ -228,16 +228,29 @@ export class VapiApiClient {
             const callData = await this.getCall(callId);
             const metadata = callData?.metadata || {};
             const ghlMetadata = metadata?.ghl || null;
+            // Extract structured outputs from artifact (e.g. "Call Summary" schema)
+            const structuredOutputs = callData?.artifact?.structuredOutputs || null;
+            let structuredSummary = null;
+            if (structuredOutputs && typeof structuredOutputs === 'object') {
+                for (const output of Object.values(structuredOutputs)) {
+                    if (typeof output?.result === 'string' && output.result.length > 0) {
+                        structuredSummary = output.result;
+                        break;
+                    }
+                }
+            }
             Logger.info('[VAPI_CLIENT] Call metadata extracted', {
                 callId,
                 hasMetadata: Object.keys(metadata).length > 0,
                 hasGhlMetadata: !!ghlMetadata,
                 ghlKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
+                hasStructuredSummary: !!structuredSummary,
             });
             return {
                 metadata,
                 ghlMetadata,
                 fullCall: callData,
+                structuredSummary,
             };
         }
         catch (error) {

@@ -9,10 +9,6 @@ import {
   UpdateStageArgs,
   CheckCalendarAvailabilityArgs,
   ScheduleAppointmentArgs,
-  CheckCallbackAvailabilityArgs,
-  ScheduleCallbackArgs,
-  CheckGabrielAvailabilityArgs,
-  ScheduleGabrielArgs,
   ToolResult,
 } from './schemas.js';
 
@@ -77,6 +73,72 @@ export class GHLConnector {
   }
 
   /**
+   * Lookup a GHL contact by phone number.
+   * Returns a ghlMetadata-shaped object or null if not found.
+   */
+  async lookupContactByPhone(phone: string): Promise<{ contactId: string; contact: any } | null> {
+    const ghlApiKey = this.getGHLApiKey();
+    if (!ghlApiKey) {
+      Logger.warn('[GHL_CONNECTOR] Cannot lookup contact - no API key');
+      return null;
+    }
+
+    const trySearch = async (phoneParam: string) => {
+      const response = await this.httpClient.get(
+        `https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(phoneParam)}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${ghlApiKey}`,
+            'Content-Type': 'application/json',
+            'Version': '2021-07-28',
+          },
+        }
+      );
+      if (response.ok) {
+        return response.data?.contacts || response.data?.data?.contacts || [];
+      }
+      return [];
+    };
+
+    try {
+      let contacts = await trySearch(phone);
+      if (contacts.length === 0 && phone.startsWith('+')) {
+        contacts = await trySearch(phone.substring(1));
+      }
+
+      if (contacts.length === 0) {
+        Logger.warn('[GHL_CONNECTOR] No contact found by phone', { phone: '***' + phone.slice(-4) });
+        return null;
+      }
+
+      const contact = contacts[0];
+      Logger.info('[GHL_CONNECTOR] Contact found by phone lookup', {
+        contactId: contact.id,
+        phone: '***' + phone.slice(-4),
+      });
+
+      return {
+        contactId: contact.id,
+        contact: {
+          id: contact.id,
+          firstName: contact.firstName || '',
+          lastName: contact.lastName || '',
+          name: contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim(),
+          email: contact.email || '',
+          phone: contact.phone || contact.phoneNumber || phone,
+          phoneNumber: contact.phoneNumber || contact.phone || phone,
+        },
+      };
+    } catch (error) {
+      Logger.error('[GHL_CONNECTOR] Phone lookup failed', {
+        phone: '***' + phone.slice(-4),
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return null;
+    }
+  }
+
+  /**
    * Get the Calendar ID based on Assistant ID
    */
   private getCalendarId(): string | null {
@@ -96,316 +158,6 @@ export class GHLConnector {
       assistantId: this.assistantId,
     });
     return null;
-  }
-
-  /**
-   * Get the Callback Calendar ID based on Assistant ID
-   */
-  private getCallbackCalendarId(): string | null {
-    if (this.assistantId) {
-      const callbackCalendarId = ClientConfigManager.getCallbackCalendarId(this.assistantId);
-      if (callbackCalendarId) {
-        Logger.info('[GHL_CONNECTOR] Using client-specific callback calendar ID', {
-          assistantId: this.assistantId,
-          clientName: ClientConfigManager.getClientName(this.assistantId),
-          callbackCalendarId,
-        });
-        return callbackCalendarId;
-      }
-    }
-
-    Logger.warn('[GHL_CONNECTOR] No callback calendar ID found for assistant', {
-      assistantId: this.assistantId,
-    });
-    return null;
-  }
-
-  /**
-   * Get the Gabriel Calendar ID based on Assistant ID
-   */
-  private getGabrielCalendarId(): string | null {
-    if (this.assistantId) {
-      const gabrielCalendarId = ClientConfigManager.getGabrielCalendarId(this.assistantId);
-      if (gabrielCalendarId) {
-        Logger.info('[GHL_CONNECTOR] Using client-specific Gabriel calendar ID', {
-          assistantId: this.assistantId,
-          clientName: ClientConfigManager.getClientName(this.assistantId),
-          gabrielCalendarId,
-        });
-        return gabrielCalendarId;
-      }
-    }
-
-    Logger.warn('[GHL_CONNECTOR] No Gabriel calendar ID found for assistant', {
-      assistantId: this.assistantId,
-    });
-    return null;
-  }
-
-  /**
-   * Extract time mentioned by user from transcript
-   * Looks for patterns like "9 AM", "3 PM", "2:30 PM", etc.
-   */
-  private extractTimeFromTranscript(transcript: string): { hour: number; minute: number; period: 'AM' | 'PM' | null } | null {
-    if (!transcript) return null;
-    
-    // Patterns to match:
-    // - "9 AM", "9am", "9:00 AM"
-    // - "3 PM", "3pm", "3:30 PM"
-    // - "2 o'clock", "2:00"
-    const patterns = [
-      /(\d{1,2})\s*(?:o'?clock|:00)?\s*(AM|PM|am|pm)/i,
-      /(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)/i,
-      /(\d{1,2})\s*(AM|PM|am|pm)/i,
-    ];
-    
-    for (const pattern of patterns) {
-      const match = transcript.match(pattern);
-      if (match && match[1]) {
-        const hour = parseInt(match[1], 10);
-        const minute = match[2] ? parseInt(match[2], 10) : 0;
-        const period = (match[3] || match[2])?.toUpperCase() as 'AM' | 'PM' | null;
-        
-        // Convert to 24-hour format
-        let hour24 = hour;
-        if (period === 'PM' && hour !== 12) {
-          hour24 = hour + 12;
-        } else if (period === 'AM' && hour === 12) {
-          hour24 = 0;
-        }
-        
-        Logger.info('[TRANSCRIPT_TIME] Extracted time from transcript', {
-          transcript: transcript.substring(0, 200),
-          extracted: { hour, minute, period, hour24 },
-        });
-        
-        return { hour: hour24, minute, period };
-      }
-    }
-    
-    return null;
-  }
-
-  /**
-   * Validate and correct appointment time using transcript if available
-   * Ensures the time matches what the user actually said
-   */
-  private async correctAppointmentTimeWithTranscript(
-    dateTimeString: string,
-    callId: string | undefined,
-    stateStorage: any
-  ): Promise<string> {
-    // If no callId, use regular correction
-    if (!callId || !stateStorage) {
-      return this.correctAppointmentTime(dateTimeString);
-    }
-    
-    try {
-      // Get transcript from storage
-      const transcript = await stateStorage.getTranscript(callId);
-      
-      if (transcript) {
-        // Extract time from transcript
-        const transcriptTime = this.extractTimeFromTranscript(transcript);
-        
-        if (transcriptTime) {
-          // Parse the datetime from AI
-          const aiDate = new Date(dateTimeString);
-          const isUTC = dateTimeString.endsWith('Z');
-          
-          // Get timezone from original or use client's default
-          let timezone = '-05:00'; // Default to EST
-          const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
-          if (timezoneMatch && timezoneMatch[1]) {
-            timezone = timezoneMatch[1];
-          } else if (this.assistantId) {
-            // Try to get timezone from client config (if we add it later)
-            // For now, use default based on common timezones
-            const clientName = ClientConfigManager.getClientName(this.assistantId);
-            if (clientName.includes('Texas') || clientName.includes('West Texas')) {
-              timezone = '-06:00'; // Central Time
-            } else if (clientName.includes('ChiroMedix')) {
-              timezone = '-08:00'; // Pacific Time
-            }
-          }
-          
-          // If AI sent UTC, we need to check if it matches transcript when converted to local time
-          let aiHourLocal = aiDate.getHours();
-          if (isUTC) {
-            // Convert UTC to local timezone for comparison
-            // Parse the date as if it were in the client's timezone
-            const localDateStr = dateTimeString.replace('Z', timezone);
-            const localDate = new Date(localDateStr);
-            aiHourLocal = localDate.getHours();
-          }
-          
-          // Compare with transcript time
-          if (aiHourLocal !== transcriptTime.hour) {
-            Logger.warn('[TRANSCRIPT_VALIDATION] Time mismatch detected', {
-              transcriptTime: transcriptTime.hour,
-              aiTimeUTC: isUTC ? aiDate.getHours() : undefined,
-              aiTimeLocal: aiHourLocal,
-              dateTimeString,
-              isUTC,
-            });
-            
-            // Correct the time to match transcript
-            // Use the date from AI but set the hour/minute from transcript
-            const correctedDate = new Date(aiDate);
-            correctedDate.setHours(transcriptTime.hour, transcriptTime.minute, 0, 0);
-            
-            // Reconstruct datetime string with client's timezone
-            const year = correctedDate.getFullYear();
-            const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
-            const day = String(correctedDate.getDate()).padStart(2, '0');
-            const correctedHourStr = String(correctedDate.getHours()).padStart(2, '0');
-            const correctedMinStr = String(correctedDate.getMinutes()).padStart(2, '0');
-            const correctedSecStr = String(correctedDate.getSeconds()).padStart(2, '0');
-            
-            const corrected = `${year}-${month}-${day}T${correctedHourStr}:${correctedMinStr}:${correctedSecStr}${timezone}`;
-            
-            Logger.info('[TRANSCRIPT_VALIDATION] Corrected time based on transcript', {
-              original: dateTimeString,
-              corrected,
-              transcriptTime: transcriptTime.hour,
-              aiTimeLocal: aiHourLocal,
-              timezone,
-            });
-            
-            return corrected;
-          } else {
-            // Time matches, but if it was in UTC, convert to client timezone
-            if (isUTC) {
-              const year = aiDate.getFullYear();
-              const month = String(aiDate.getMonth() + 1).padStart(2, '0');
-              const day = String(aiDate.getDate()).padStart(2, '0');
-              const hourStr = String(transcriptTime.hour).padStart(2, '0');
-              const minStr = String(transcriptTime.minute).padStart(2, '0');
-              
-              const converted = `${year}-${month}-${day}T${hourStr}:${minStr}:00${timezone}`;
-              
-              Logger.info('[TRANSCRIPT_VALIDATION] Converted UTC to client timezone', {
-                original: dateTimeString,
-                converted,
-                timezone,
-              });
-              
-              return converted;
-            }
-            
-            Logger.info('[TRANSCRIPT_VALIDATION] Time matches transcript', {
-              dateTimeString,
-              transcriptTime: transcriptTime.hour,
-              aiTimeLocal: aiHourLocal,
-            });
-          }
-        }
-      }
-    } catch (error) {
-      Logger.warn('[TRANSCRIPT_VALIDATION] Error using transcript, falling back to regular correction', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-    
-    // Fallback to regular correction
-    return this.correctAppointmentTime(dateTimeString);
-  }
-
-  /**
-   * Validate and correct appointment time to ensure it matches user's requested time
-   * Detects common AI timezone conversion errors and corrects them
-   * Business hours: 8 AM - 7 PM (08:00 - 19:00)
-   */
-  private correctAppointmentTime(dateTimeString: string): string {
-    try {
-      // Parse the datetime
-      const date = new Date(dateTimeString);
-      if (isNaN(date.getTime())) {
-        Logger.warn('[TIME_VALIDATION] Invalid date format, using as-is', { dateTimeString });
-        return dateTimeString;
-      }
-
-      const hour = date.getHours();
-      const minutes = date.getMinutes();
-      
-      // Extract timezone from original string
-      const timezoneMatch = dateTimeString.match(/([+-]\d{2}:\d{2})$/);
-      const timezone = timezoneMatch ? timezoneMatch[1] : '-05:00';
-      
-      // Business hours validation: 8 AM - 7 PM (08:00 - 19:00)
-      // If hour is outside business hours, it's likely a conversion error
-      const isOutsideBusinessHours = hour < 8 || hour >= 20;
-      
-      if (isOutsideBusinessHours) {
-        Logger.warn('[TIME_VALIDATION] Time outside business hours, attempting correction', {
-          original: dateTimeString,
-          hour,
-          minutes,
-          isBeforeBusinessHours: hour < 8,
-          isAfterBusinessHours: hour >= 20,
-        });
-        
-        // Try multiple correction strategies
-        const correctionStrategies = [
-          { hours: -6, description: '6 hours (common CST/EST error)' },
-          { hours: -12, description: '12 hours (AM/PM confusion)' },
-          { hours: 6, description: '+6 hours (reverse error)' },
-          { hours: 12, description: '+12 hours (reverse AM/PM)' },
-        ];
-        
-        for (const strategy of correctionStrategies) {
-          const correctedDate = new Date(date.getTime() + strategy.hours * 60 * 60 * 1000);
-          const correctedHour = correctedDate.getHours();
-          
-          // Check if corrected hour is in business hours
-          if (correctedHour >= 8 && correctedHour <= 19) {
-            // Reconstruct datetime string with corrected time
-            const year = correctedDate.getFullYear();
-            const month = String(correctedDate.getMonth() + 1).padStart(2, '0');
-            const day = String(correctedDate.getDate()).padStart(2, '0');
-            const correctedHourStr = String(correctedHour).padStart(2, '0');
-            const correctedMinStr = String(correctedDate.getMinutes()).padStart(2, '0');
-            const correctedSecStr = String(correctedDate.getSeconds()).padStart(2, '0');
-            
-            const corrected = `${year}-${month}-${day}T${correctedHourStr}:${correctedMinStr}:${correctedSecStr}${timezone}`;
-            
-            Logger.info('[TIME_VALIDATION] Corrected appointment time', {
-              original: dateTimeString,
-              corrected,
-              originalHour: hour,
-              correctedHour: correctedHour,
-              strategy: strategy.description,
-              correctionHours: strategy.hours,
-            });
-            
-            return corrected;
-          }
-        }
-        
-        // If no correction worked, log warning but return original
-        Logger.warn('[TIME_VALIDATION] Could not find valid correction, using original', {
-          original: dateTimeString,
-          hour,
-          minutes,
-        });
-      } else {
-        // Hour is in business hours, validate it's reasonable
-        Logger.debug('[TIME_VALIDATION] Time is within business hours', {
-          dateTimeString,
-          hour,
-          minutes,
-        });
-      }
-      
-      // Return original if already valid or if correction failed
-      return dateTimeString;
-    } catch (error) {
-      Logger.warn('[TIME_VALIDATION] Error validating time, using as-is', {
-        dateTimeString,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return dateTimeString;
-    }
   }
 
   async sendSms(id: string, args: SendSmsArgs): Promise<ToolResult> {
@@ -760,88 +512,72 @@ export class GHLConnector {
     }
   }
 
-  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, callId?: string, stateStorage?: any): Promise<ToolResult> {
-    const calendarId = this.getCalendarId();
-    if (!calendarId) {
-      const error = 'Calendar ID not configured for this client';
-      Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
-      return { id, ok: false, error };
-    }
-    return this.checkAvailabilityInternal(id, args.dateTime, args.durationMinutes || 30, calendarId, 'appointment', callId, stateStorage);
-  }
-
-  async checkCallbackAvailability(id: string, args: CheckCallbackAvailabilityArgs, callId?: string, stateStorage?: any): Promise<ToolResult> {
-    const callbackCalendarId = this.getCallbackCalendarId();
-    if (!callbackCalendarId) {
-      const error = 'Callback Calendar ID not configured for this client';
-      Logger.error('[CALLBACK] ' + error, { id, assistantId: this.assistantId });
-      return { id, ok: false, error };
-    }
-    return this.checkAvailabilityInternal(id, args.dateTime, args.durationMinutes || 15, callbackCalendarId, 'callback', callId, stateStorage);
-  }
-
-  /**
-   * Shared logic for checking calendar availability (appointment or callback)
-   */
-  private async checkAvailabilityInternal(
-    id: string,
-    dateTime: string,
-    durationMinutes: number,
-    calendarId: string,
-    calendarType: 'appointment' | 'callback',
-    callId?: string,
-    stateStorage?: any,
-  ): Promise<ToolResult> {
-    const logPrefix = calendarType === 'callback' ? '[CALLBACK]' : '[CALENDAR]';
+  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any): Promise<ToolResult> {
     try {
-      Logger.info(`${logPrefix} Processing check_${calendarType}_availability`, { id, dateTime, durationMinutes, calendarId });
+      Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args });
 
       const ghlApiKey = this.getGHLApiKey();
       if (!ghlApiKey) {
         const error = 'GHL_API_KEY not configured for this client';
-        Logger.error(`${logPrefix} ${error}`, { id, assistantId: this.assistantId });
-        return { id, ok: false, error };
+        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+        return {
+          id,
+          ok: false,
+          error,
+        };
       }
 
-      const correctedDateTime = await this.correctAppointmentTimeWithTranscript(dateTime, callId, stateStorage);
-      
-      Logger.info(`${logPrefix} DateTime correction applied`, {
-        id, original: dateTime, corrected: correctedDateTime,
-        wasCorrected: dateTime !== correctedDateTime,
+      const calendarId = this.getCalendarId();
+      if (!calendarId) {
+        const error = 'Calendar ID not configured for this client';
+        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      // Trust the AI's dateTime as-is — transcript correction was overwriting
+      // legitimate slot queries (e.g. checking 3 PM when user said "11 AM")
+      const correctedDateTime = args.dateTime;
+
+      Logger.info('[CALENDAR] Using dateTime as provided by AI', {
+        id,
+        dateTime: correctedDateTime,
       });
       
+      // Parse the requested dateTime
       const requestedDate = new Date(correctedDateTime);
       if (isNaN(requestedDate.getTime())) {
         const error = 'Invalid dateTime format';
-        Logger.error(`${logPrefix} ${error}`, { id, dateTime: correctedDateTime });
-        return { id, ok: false, error };
+        Logger.error('[CALENDAR] ' + error, { id, dateTime: correctedDateTime });
+        return {
+          id,
+          ok: false,
+          error,
+        };
       }
 
-      const endDate = new Date(requestedDate.getTime() + durationMinutes * 60000);
+      // Calculate end time based on duration
+      const endDate = new Date(requestedDate.getTime() + (args.durationMinutes || 30) * 60000);
 
-      // Extract local date and timezone offset directly from the ISO string.
-      // Do NOT use toISOString() here — that converts to UTC and shifts the date
-      // for non-UTC timezones, causing the GHL date-key lookup to miss the day entirely.
-      const requestedDateKey = correctedDateTime.split('T')[0];
-      const tzMatch = correctedDateTime.match(/([+-]\d{2}:\d{2}|Z)$/);
-      const tzOffset = tzMatch ? tzMatch[1] : 'Z';
-
-      // Query the full day in local timezone so GHL date keys align with requestedDateKey
-      const startOfDay = new Date(`${requestedDateKey}T00:00:00${tzOffset}`);
-      const endOfDay = new Date(`${requestedDateKey}T23:59:59${tzOffset}`);
+      // Query GHL Calendar API for free slots
+      // We'll check a range around the requested time
+      const startDate = new Date(requestedDate.getTime() - 60 * 60000); // 1 hour before
+      const endDateRange = new Date(requestedDate.getTime() + 2 * 60 * 60000); // 2 hours after
 
       const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
-      const timezone = this.assistantId ? ClientConfigManager.getTimezone(this.assistantId) : 'America/Chicago';
       const params = new URLSearchParams({
-        startDate: startOfDay.getTime().toString(),
-        endDate: endOfDay.getTime().toString(),
-        timezone,
+        startDate: startDate.getTime().toString(),
+        endDate: endDateRange.getTime().toString(),
       });
 
-      Logger.info(`${logPrefix} Querying GHL Calendar API`, {
-        id, calendarId, calendarType,
+      Logger.info('[CALENDAR] Querying GHL Calendar API', {
+        id,
+        calendarId,
         requestedTime: requestedDate.toISOString(),
-        queryRange: `${startOfDay.toISOString()} to ${endOfDay.toISOString()}`,
+        queryRange: `${startDate.toISOString()} to ${endDateRange.toISOString()}`,
       });
 
       const response = await this.httpClient.get(`${apiUrl}?${params.toString()}`, {
@@ -855,60 +591,85 @@ export class GHLConnector {
       if (!response.ok) {
         const errorDetails = response.data ? JSON.stringify(response.data) : 'No error details';
         const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
-        Logger.error(`${logPrefix} ${error}`, {
-          id, calendarId,
+        Logger.error('[CALENDAR] ' + error, { 
+          id, 
+          calendarId,
           apiUrl: `${apiUrl}?${params.toString()}`,
-          requestParams: { startDate: startOfDay.toISOString(), endDate: endOfDay.toISOString() },
+          requestParams: {
+            startDate: startDate.toISOString(),
+            endDate: endDateRange.toISOString(),
+          },
           responseData: response.data,
           responseStatus: response.status,
           responseStatusText: response.statusText,
           fullResponse: JSON.stringify(response.data),
         });
-        return { id, ok: false, error: `${error}. Details: ${errorDetails}` };
+        return {
+          id,
+          ok: false,
+          error: `${error}. Details: ${errorDetails}`,
+        };
       }
 
-      Logger.info(`${logPrefix} Full GHL API response`, {
-        id, responseData: response.data,
+      // Log the full response from GHL to understand the structure
+      Logger.info('[CALENDAR] Full GHL API response', {
+        id,
+        responseData: response.data,
         responseDataKeys: response.data ? Object.keys(response.data) : [],
         responseDataType: typeof response.data,
       });
 
       // GHL returns slots organized by date: { "2025-12-23": { "slots": [...] } }
+      // Extract the date key for the requested date (format: YYYY-MM-DD)
+      const requestedDateKey = requestedDate.toISOString().split('T')[0];
+      
+      // Get slots for the requested date
       const dateSlots = requestedDateKey && response.data ? response.data[requestedDateKey] : null;
       const freeSlots = dateSlots?.slots || [];
       
-      Logger.info(`${logPrefix} Free slots from GHL`, {
-        id, requestedDateKey,
-        freeSlotsCount: freeSlots.length, freeSlots,
+      Logger.info('[CALENDAR] Free slots from GHL', {
+        id,
+        requestedDateKey,
+        freeSlotsCount: freeSlots.length,
+        freeSlots: freeSlots,
         requestedDate: requestedDate.toISOString(),
         requestedDateTimestamp: requestedDate.getTime(),
         endDate: endDate.toISOString(),
         endDateTimestamp: endDate.getTime(),
       });
 
-      // Compare local clock time (HH:MM) extracted directly from the ISO strings,
-      // NOT UTC timestamps. The AI sometimes sends the right clock time but with
-      // the wrong UTC offset (e.g. -04:00 vs -05:00), which shifts the UTC value
-      // by 1 hour even though the intended time is correct. Comparing HH:MM
-      // makes the check offset-agnostic and matches what the user actually said.
-      const requestedHHMM = correctedDateTime.substring(11, 16);
+      // GHL returns slots as ISO string times (e.g., "2025-12-23T10:00:00-05:00")
+      // Check if the requested time matches any of the available slot start times
+      // Since slots are 30-minute intervals, we check if requestedDate matches a slot start time
       const isAvailable = freeSlots.some((slotTime: string) => {
-        const slotHHMM = slotTime.substring(11, 16);
-        const matches = requestedHHMM === slotHHMM;
-
-        Logger.debug(`${logPrefix} Comparing slot`, {
-          slotTime, slotHHMM,
-          requestedHHMM,
+        const slotDate = new Date(slotTime);
+        
+        // Check if the requested time matches the slot start time (within 1 minute tolerance)
+        const timeDiff = Math.abs(requestedDate.getTime() - slotDate.getTime());
+        const matches = timeDiff < 60000; // 1 minute tolerance
+        
+        Logger.debug('[CALENDAR] Comparing slot', {
+          slotTime,
+          slotDate: slotDate.toISOString(),
+          slotDateTimestamp: slotDate.getTime(),
+          requestedDate: requestedDate.toISOString(),
+          requestedDateTimestamp: requestedDate.getTime(),
+          timeDiffMs: timeDiff,
           matches,
         });
-
+        
         return matches;
       });
 
-      Logger.info(`${logPrefix} Availability check completed`, {
-        id, requestedTime: requestedDate.toISOString(),
-        isAvailable, freeSlotsCount: freeSlots.length, calendarType,
+      Logger.info('[CALENDAR] Availability check completed', {
+        id,
+        requestedTime: requestedDate.toISOString(),
+        isAvailable,
+        freeSlotsCount: freeSlots.length,
       });
+
+      // When unavailable, include the actual available slots for the day so the AI can offer alternatives
+      const availableSlotsForDay = freeSlots.slice(0, 10); // up to 10 slots
 
       return {
         id,
@@ -916,79 +677,34 @@ export class GHLConnector {
         data: {
           available: isAvailable,
           requestedTime: requestedDate.toISOString(),
-          duration: durationMinutes,
-          calendarType,
-          freeSlots,
+          duration: args.durationMinutes || 30,
           message: isAvailable
-            ? `The requested ${calendarType} time slot is available`
+            ? 'The requested time slot is available'
             : freeSlots.length > 0
-              ? `The requested ${calendarType} time slot is not available. Available slots for ${requestedDateKey}: ${freeSlots.join(', ')}`
-              : `The requested ${calendarType} time slot is not available and there are no open slots on ${requestedDateKey}. Please check a different date.`,
+              ? `The requested time slot is not available. Available slots for this day: ${availableSlotsForDay.join(', ')}`
+              : 'The requested time slot is not available and there are no open slots for this day.',
+          ...(isAvailable ? {} : { availableSlots: availableSlotsForDay }),
         },
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      Logger.error(`${logPrefix} Error in check_${calendarType}_availability`, { id, error: errorMessage });
-      return { id, ok: false, error: errorMessage };
+      Logger.error('[CALENDAR] Error in check_calendar_availability', { 
+        id, 
+        error: errorMessage 
+      });
+      return {
+        id,
+        ok: false,
+        error: errorMessage,
+      };
     }
   }
 
-  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, callId?: string, stateStorage?: any): Promise<ToolResult> {
-    const calendarId = this.getCalendarId();
-    if (!calendarId) {
-      const error = 'Calendar ID not configured for this client';
-      Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
-      return { id, ok: false, error };
-    }
-    return this.scheduleEventInternal(id, args, calendarId, 'appointment', ghlMetadata, callId, stateStorage);
-  }
-
-  async scheduleCallback(id: string, args: ScheduleCallbackArgs, ghlMetadata?: any, callId?: string, stateStorage?: any): Promise<ToolResult> {
-    const callbackCalendarId = this.getCallbackCalendarId();
-    if (!callbackCalendarId) {
-      const error = 'Callback Calendar ID not configured for this client';
-      Logger.error('[CALLBACK] ' + error, { id, assistantId: this.assistantId });
-      return { id, ok: false, error };
-    }
-    return this.scheduleEventInternal(id, args, callbackCalendarId, 'callback', ghlMetadata, callId, stateStorage);
-  }
-
-  async checkGabrielAvailability(id: string, args: CheckGabrielAvailabilityArgs, callId?: string, stateStorage?: any): Promise<ToolResult> {
-    const gabrielCalendarId = this.getGabrielCalendarId();
-    if (!gabrielCalendarId) {
-      const error = 'Gabriel Calendar ID not configured for this client';
-      Logger.error('[GABRIEL] ' + error, { id, assistantId: this.assistantId });
-      return { id, ok: false, error };
-    }
-    return this.checkAvailabilityInternal(id, args.dateTime, args.durationMinutes || 30, gabrielCalendarId, 'appointment', callId, stateStorage);
-  }
-
-  async scheduleGabriel(id: string, args: ScheduleGabrielArgs, ghlMetadata?: any, callId?: string, stateStorage?: any): Promise<ToolResult> {
-    const gabrielCalendarId = this.getGabrielCalendarId();
-    if (!gabrielCalendarId) {
-      const error = 'Gabriel Calendar ID not configured for this client';
-      Logger.error('[GABRIEL] ' + error, { id, assistantId: this.assistantId });
-      return { id, ok: false, error };
-    }
-    return this.scheduleEventInternal(id, args, gabrielCalendarId, 'appointment', ghlMetadata, callId, stateStorage);
-  }
-
-  /**
-   * Shared logic for scheduling events in GHL (appointment or callback)
-   */
-  private async scheduleEventInternal(
-    id: string,
-    args: ScheduleAppointmentArgs | ScheduleCallbackArgs,
-    calendarId: string,
-    calendarType: 'appointment' | 'callback',
-    ghlMetadata?: any,
-    callId?: string,
-    stateStorage?: any,
-  ): Promise<ToolResult> {
-    const logPrefix = calendarType === 'callback' ? '[CALLBACK]' : '[CALENDAR]';
+  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any): Promise<ToolResult> {
     try {
-      Logger.info(`${logPrefix} Processing schedule_${calendarType}`, { 
-        id, args, calendarId, calendarType,
+      Logger.info('[CALENDAR] Processing schedule_appointment', { 
+        id, 
+        args, 
         hasGhlMetadata: !!ghlMetadata,
         ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
         ghlMetadataContact: ghlMetadata?.contact ? {
@@ -1006,20 +722,41 @@ export class GHLConnector {
       const ghlApiKey = this.getGHLApiKey();
       if (!ghlApiKey) {
         const error = 'GHL_API_KEY not configured for this client';
-        Logger.error(`${logPrefix} ${error}`, { id, assistantId: this.assistantId });
-        return { id, ok: false, error };
+        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+        return {
+          id,
+          ok: false,
+          error,
+        };
+      }
+
+      const calendarId = this.getCalendarId();
+      if (!calendarId) {
+        const error = 'Calendar ID not configured for this client';
+        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+        return {
+          id,
+          ok: false,
+          error,
+        };
       }
 
       // Try to get locationId (priority: config > calendar API)
       let locationId: string | undefined;
       
+      // First, try to get from config
       if (this.assistantId) {
         locationId = ClientConfigManager.getLocationId(this.assistantId);
         if (locationId) {
-          Logger.info(`${logPrefix} Using locationId from config`, { id, calendarId, locationId });
+          Logger.info('[CALENDAR] Using locationId from config', {
+            id,
+            calendarId,
+            locationId,
+          });
         }
       }
 
+      // If not in config, try to get from calendar info
       if (!locationId) {
         try {
           const calendarResponse = await this.httpClient.get(
@@ -1034,11 +771,17 @@ export class GHLConnector {
           );
 
           if (calendarResponse.ok) {
+            // GHL API returns calendar data in different structures:
+            // Option 1: { calendar: { locationId: "..." } } - most common
+            // Option 2: { locationId: "..." }
+            // Option 3: { location: { id: "..." } }
             const calendarData = calendarResponse.data?.calendar || calendarResponse.data;
             locationId = calendarData?.locationId || calendarResponse.data?.locationId || calendarData?.location?.id || calendarResponse.data?.location?.id;
             
-            Logger.info(`${logPrefix} Retrieved locationId from calendar`, {
-              id, calendarId, locationId,
+            Logger.info('[CALENDAR] Retrieved locationId from calendar', {
+              id,
+              calendarId,
+              locationId,
               calendarDataKeys: calendarResponse.data ? Object.keys(calendarResponse.data) : [],
               calendarKeys: calendarData ? Object.keys(calendarData) : [],
               hasLocationId: !!calendarData?.locationId,
@@ -1047,69 +790,93 @@ export class GHLConnector {
               fullCalendarData: JSON.stringify(calendarResponse.data).substring(0, 500),
             });
           } else {
-            Logger.warn(`${logPrefix} Could not retrieve calendar info for locationId`, {
-              id, calendarId, status: calendarResponse.status,
+            Logger.warn('[CALENDAR] Could not retrieve calendar info for locationId', {
+              id,
+              calendarId,
+              status: calendarResponse.status,
             });
           }
         } catch (error) {
-          Logger.warn(`${logPrefix} Error retrieving calendar info for locationId`, {
-            id, calendarId,
+          Logger.warn('[CALENDAR] Error retrieving calendar info for locationId', {
+            id,
+            calendarId,
             error: error instanceof Error ? error.message : 'Unknown error',
           });
         }
       }
 
-      const correctedStartTime = await this.correctAppointmentTimeWithTranscript(args.startTime, callId, stateStorage);
-      const correctedEndTime = await this.correctAppointmentTimeWithTranscript(args.endTime, callId, stateStorage);
-      
-      Logger.info(`${logPrefix} Time correction applied for validation`, {
+      // Trust the AI's startTime/endTime as-is — transcript correction was
+      // corrupting times by forcing every datetime to match the spoken hour
+      const correctedStartTime = args.startTime;
+      const correctedEndTime = args.endTime;
+
+      Logger.info('[CALENDAR] Using startTime/endTime as provided by AI', {
         id,
-        originalStartTime: args.startTime, correctedStartTime,
-        originalEndTime: args.endTime, correctedEndTime,
-        startTimeWasCorrected: args.startTime !== correctedStartTime,
-        endTimeWasCorrected: args.endTime !== correctedEndTime,
+        startTime: correctedStartTime,
+        endTime: correctedEndTime,
       });
       
+      // Validate date formats (using corrected times)
       const startTime = new Date(correctedStartTime);
       const endTime = new Date(correctedEndTime);
 
       if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
         const error = 'Invalid date format for startTime or endTime';
-        Logger.error(`${logPrefix} ${error}`, { id, startTime: correctedStartTime, endTime: correctedEndTime });
-        return { id, ok: false, error };
+        Logger.error('[CALENDAR] ' + error, { id, startTime: correctedStartTime, endTime: correctedEndTime });
+        return {
+          id,
+          ok: false,
+          error,
+        };
       }
 
       if (endTime <= startTime) {
         const error = 'endTime must be after startTime';
-        Logger.error(`${logPrefix} ${error}`, { id, args });
-        return { id, ok: false, error };
+        Logger.error('[CALENDAR] ' + error, { id, args });
+        return {
+          id,
+          ok: false,
+          error,
+        };
       }
 
-      // Resolve contact details from multiple sources
+      // Try to get contact details from multiple sources (priority order):
+      // 1. args.phone (passed directly by AI agent)
+      // 2. GHL metadata (from webhook)
+      // 3. API call (if contactId provided)
       let contactPhone = '';
       let contactFirstName = '';
       let contactLastName = '';
 
+      // First priority: phone from args (passed directly by AI agent)
       if (args.phone) {
         contactPhone = args.phone;
-        Logger.info(`${logPrefix} Using phone from args`, {
-          id, phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
+        Logger.info('[CALENDAR] Using phone from args', {
+          id,
+          phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
         });
       }
 
+      // Second priority: GHL metadata (from webhook)
       if (!contactPhone && ghlMetadata?.contact) {
-        Logger.info(`${logPrefix} Using contact details from GHL metadata`, { id, hasContact: !!ghlMetadata.contact });
+        Logger.info('[CALENDAR] Using contact details from GHL metadata', {
+          id,
+          hasContact: !!ghlMetadata.contact,
+        });
         
         contactPhone = ghlMetadata.contact.phone || ghlMetadata.contact.phoneNumber || '';
         contactFirstName = ghlMetadata.contact.firstName || '';
         contactLastName = ghlMetadata.contact.lastName || '';
 
-        Logger.info(`${logPrefix} Contact details from metadata`, {
-          id, firstName: contactFirstName, lastName: contactLastName,
+        Logger.info('[CALENDAR] Contact details from metadata', {
+          id,
+          firstName: contactFirstName,
+          lastName: contactLastName,
           phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
         });
       }
 
+      // Parse name from args.name (only if we don't have it from metadata)
       if (!contactFirstName || !contactLastName) {
         const nameParts = args.name.trim().split(/\s+/);
         if (!contactFirstName) {
@@ -1117,20 +884,24 @@ export class GHLConnector {
         }
         if (!contactLastName) {
           contactLastName = nameParts.slice(1).join(' ') || '';
+          // GHL might require lastName, use firstName if empty
           if (!contactLastName && contactFirstName) {
             contactLastName = contactFirstName;
           }
         }
       }
 
+      // Normalize phone (remove spaces and special characters, keep + and numbers)
       if (contactPhone) {
         contactPhone = contactPhone.replace(/\s+/g, '').trim();
       }
 
-      const isValidContactId = (id: string) => id.length >= 10 && /^[a-zA-Z0-9]+$/.test(id);
-
-      if (!contactPhone && args.contactId && isValidContactId(args.contactId)) {
-        Logger.info(`${logPrefix} Attempting to fetch phone from API`, { id, contactId: args.contactId });
+      // Third priority: Only try API if we're missing phone AND have contactId
+      if (!contactPhone && args.contactId) {
+        Logger.info('[CALENDAR] Attempting to fetch phone from API', {
+          id,
+          contactId: args.contactId,
+        });
 
         try {
           const contactResponse = await this.httpClient.get(
@@ -1147,87 +918,125 @@ export class GHLConnector {
           if (contactResponse.ok) {
             const contact = contactResponse.data?.contact || contactResponse.data;
             contactPhone = contact.phone || contact.phoneNumber || '';
+            
+            // Normalize phone
             if (contactPhone) {
               contactPhone = contactPhone.replace(/\s+/g, '').trim();
             }
-            Logger.info(`${logPrefix} Phone retrieved from API`, {
-              id, contactId: args.contactId,
+
+            Logger.info('[CALENDAR] Phone retrieved from API', {
+              id,
+              contactId: args.contactId,
               phone: contactPhone ? '***' + contactPhone.slice(-4) : 'missing',
             });
           } else {
-            Logger.warn(`${logPrefix} Could not fetch phone from API`, {
-              id, contactId: args.contactId, status: contactResponse.status, statusText: contactResponse.statusText,
+            Logger.warn('[CALENDAR] Could not fetch phone from API', {
+              id,
+              contactId: args.contactId,
+              status: contactResponse.status,
+              statusText: contactResponse.statusText,
             });
           }
         } catch (error) {
-          Logger.warn(`${logPrefix} Error fetching phone from API`, {
-            id, contactId: args.contactId,
+          Logger.warn('[CALENDAR] Error fetching phone from API', {
+            id,
+            contactId: args.contactId,
             error: error instanceof Error ? error.message : 'Unknown error',
           });
         }
       }
 
+      // Phone is required by GHL API
       if (!contactPhone) {
         const error = 'Phone number is required but could not be retrieved from contact metadata or API. Please ensure the contact has a phone number in GHL or that the phone is included in the webhook metadata.';
-        Logger.error(`${logPrefix} ${error}`, { 
-          id, contactId: args.contactId,
+        Logger.error('[CALENDAR] ' + error, { 
+          id, 
+          contactId: args.contactId,
           hasGhlMetadata: !!ghlMetadata,
           hasGhlContact: !!ghlMetadata?.contact,
           ghlContactKeys: ghlMetadata?.contact ? Object.keys(ghlMetadata.contact) : [],
         });
-        return { id, ok: false, error };
+        return {
+          id,
+          ok: false,
+          error,
+        };
       }
 
+      // Create appointment in GHL Calendar using the correct endpoint
+      // GHL requires: /calendars/events/appointments with firstName, lastName, phone, selectedSlot
       const apiUrl = `https://services.leadconnectorhq.com/calendars/events/appointments`;
       
+      // GHL expects selectedSlot as ISO string with timezone
+      // Use correctedStartTime (already corrected above)
+      // If startTime is already in correct format, use it; otherwise convert
       let selectedSlot = correctedStartTime;
       if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00') && !selectedSlot.includes('-06:00')) {
+        // If no timezone, assume EST and add it
         const date = new Date(correctedStartTime);
         selectedSlot = date.toISOString().replace('Z', '-05:00');
       }
 
-      let normalizedPhone = contactPhone.replace(/[\s\-\(\)\.]/g, '').trim();
+      // Normalize phone number - GHL requires E.164 format (with + and country code)
+      let normalizedPhone = contactPhone;
       
+      // Remove all spaces and special characters except +
+      normalizedPhone = normalizedPhone.replace(/[\s\-\(\)\.]/g, '').trim();
+      
+      // If phone doesn't start with +, try to add country code
       if (!normalizedPhone.startsWith('+')) {
+        // If it's a US number (10 digits), add +1
         if (/^\d{10}$/.test(normalizedPhone)) {
           normalizedPhone = '+1' + normalizedPhone;
-        } else if (/^3\d{9}$/.test(normalizedPhone)) {
+        }
+        // If it's a Colombian number (10 digits starting with 3), add +57
+        else if (/^3\d{9}$/.test(normalizedPhone)) {
           normalizedPhone = '+57' + normalizedPhone;
-        } else if (/^\d+$/.test(normalizedPhone)) {
-          Logger.warn(`${logPrefix} Phone number missing country code, using as-is`, { id, phone: normalizedPhone });
+        }
+        // Otherwise, assume it needs + prefix (might be missing country code)
+        else if (/^\d+$/.test(normalizedPhone)) {
+          // Keep as is but log warning - might need country code
+          Logger.warn('[CALENDAR] Phone number missing country code, using as-is', {
+            id,
+            phone: normalizedPhone,
+          });
         }
       }
       
+      // Ensure phone is in E.164 format (starts with +)
       if (!normalizedPhone.startsWith('+')) {
-        Logger.warn(`${logPrefix} Phone number not in E.164 format, adding +`, {
-          id, originalPhone: contactPhone, normalizedPhone,
+        Logger.warn('[CALENDAR] Phone number not in E.164 format, adding +', {
+          id,
+          originalPhone: contactPhone,
+          normalizedPhone,
         });
         normalizedPhone = '+' + normalizedPhone;
       }
 
-      // Resolve contactId from multiple sources
+      // Get contactId - contact always exists if call happened, so we must find it
       let contactIdToUse: string | undefined = args.contactId;
-
-      // GHL contact IDs are alphanumeric strings, typically 20+ characters.
-      // Reject obviously invalid values like "lead", "contact", short words, etc.
-      if (contactIdToUse && (contactIdToUse.length < 10 || !/^[a-zA-Z0-9]+$/.test(contactIdToUse))) {
-        Logger.warn(`${logPrefix} Ignoring invalid contactId from args (not a GHL ID)`, { id, contactId: contactIdToUse });
-        contactIdToUse = undefined;
-      }
-
+      
+      // Priority 1: Try to get contactId from GHL metadata (from webhook)
       if (!contactIdToUse && ghlMetadata) {
         contactIdToUse = ghlMetadata.contactId || ghlMetadata.contact?.id;
         if (contactIdToUse) {
-          Logger.info(`${logPrefix} Using contactId from GHL metadata`, { id, contactId: contactIdToUse });
+          Logger.info('[CALENDAR] Using contactId from GHL metadata', {
+            id,
+            contactId: contactIdToUse,
+          });
         }
       }
       
+      // Priority 2: Search for existing contact by phone (contact always exists)
       if (!contactIdToUse && normalizedPhone) {
         try {
-          Logger.info(`${logPrefix} Searching for existing contact by phone`, {
-            id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+          Logger.info('[CALENDAR] Searching for existing contact by phone', {
+            id,
+            phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
           });
           
+          // Try different search endpoints/formats
+          // Option 1: Search by phone with + prefix
           let searchResponse = await this.httpClient.get(
             `https://services.leadconnectorhq.com/contacts/search?phone=${encodeURIComponent(normalizedPhone)}`,
             {
@@ -1239,6 +1048,7 @@ export class GHLConnector {
             }
           );
           
+          // Option 2: If that fails, try without + prefix
           if (!searchResponse.ok && normalizedPhone.startsWith('+')) {
             const phoneWithoutPlus = normalizedPhone.substring(1);
             searchResponse = await this.httpClient.get(
@@ -1257,69 +1067,97 @@ export class GHLConnector {
             const contacts = searchResponse.data?.contacts || searchResponse.data?.data?.contacts || [];
             if (contacts.length > 0) {
               contactIdToUse = contacts[0].id;
-              Logger.info(`${logPrefix} Found existing contact by phone`, {
-                id, contactId: contactIdToUse,
+              Logger.info('[CALENDAR] Found existing contact by phone', {
+                id,
+                contactId: contactIdToUse,
                 phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
               });
             } else {
-              Logger.warn(`${logPrefix} No contacts found by phone search`, {
-                id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+              Logger.warn('[CALENDAR] No contacts found by phone search', {
+                id,
+                phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
                 responseData: searchResponse.data,
               });
             }
           } else {
-            Logger.warn(`${logPrefix} Contact search failed`, {
-              id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
-              status: searchResponse.status, statusText: searchResponse.statusText,
+            Logger.warn('[CALENDAR] Contact search failed', {
+              id,
+              phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+              status: searchResponse.status,
+              statusText: searchResponse.statusText,
             });
           }
         } catch (error) {
-          Logger.warn(`${logPrefix} Error searching for contact`, {
-            id, error: error instanceof Error ? error.message : 'Unknown error',
+          Logger.warn('[CALENDAR] Error searching for contact', {
+            id,
+            error: error instanceof Error ? error.message : 'Unknown error',
           });
         }
       }
       
+      // If we still don't have contactId, we can't proceed - contact must exist
       if (!contactIdToUse && normalizedPhone) {
         const error = `Contact ID is required but could not be found. The contact should exist in GHL (phone: ${normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing'}). Please ensure the contact exists or provide contactId in the arguments.`;
-        Logger.error(`${logPrefix} ${error}`, { 
-          id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+        Logger.error('[CALENDAR] ' + error, { 
+          id, 
+          phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
           hasGhlMetadata: !!ghlMetadata,
           ghlMetadataContactId: ghlMetadata?.contactId || ghlMetadata?.contact?.id,
         });
-        return { id, ok: false, error };
+        return {
+          id,
+          ok: false,
+          error,
+        };
       }
       
+      // GHL requires contactId - we should have it by now since contact always exists
       if (!contactIdToUse) {
-        const error = `Contact ID is required to schedule ${calendarType}. Contact should exist in GHL but could not be found.`;
-        Logger.error(`${logPrefix} ${error}`, { 
-          id, phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
+        const error = 'Contact ID is required to schedule appointment. Contact should exist in GHL but could not be found.';
+        Logger.error('[CALENDAR] ' + error, { 
+          id,
+          phone: normalizedPhone ? '***' + normalizedPhone.slice(-4) : 'missing',
         });
-        return { id, ok: false, error };
+        return {
+          id,
+          ok: false,
+          error,
+        };
       }
       
+      // Use contactId in payload (required by GHL)
       const payload: any = {
         calendarId,
         contactId: contactIdToUse,
         selectedSlot,
-        selectedTimezone: 'America/New_York',
+        selectedTimezone: 'America/New_York', // EST timezone - could be made configurable
         notes: args.notes || '',
       };
       
-      Logger.info(`${logPrefix} Using contactId in payload`, {
-        id, contactId: contactIdToUse,
+      Logger.info('[CALENDAR] Using contactId in payload', {
+        id,
+        contactId: contactIdToUse,
         payload: { ...payload, contactId: contactIdToUse },
       });
 
+      // Add locationId if available (some GHL endpoints require it)
       if (locationId) {
         payload.locationId = locationId;
-        Logger.info(`${logPrefix} Added locationId to payload`, { id, locationId, payloadWithLocationId: payload });
+        Logger.info('[CALENDAR] Added locationId to payload', {
+          id,
+          locationId,
+          payloadWithLocationId: payload,
+        });
       } else {
-        Logger.warn(`${logPrefix} locationId not available, payload will not include it`, { id, calendarId });
+        Logger.warn('[CALENDAR] locationId not available, payload will not include it', {
+          id,
+          calendarId,
+        });
       }
 
-      Logger.info(`${logPrefix} Creating ${calendarType} in GHL`, {
-        id, calendarId, calendarType,
+      Logger.info('[CALENDAR] Creating appointment in GHL', {
+        id,
+        calendarId,
         contactId: args.contactId || 'not provided',
         selectedSlot,
         startTime: startTime.toISOString(),
@@ -1339,8 +1177,9 @@ export class GHLConnector {
       });
 
       if (response.ok) {
-        Logger.info(`${logPrefix} ${calendarType} created successfully`, { 
-          id, appointmentId: response.data?.id,
+        Logger.info('[CALENDAR] Appointment created successfully', { 
+          id, 
+          appointmentId: response.data?.id,
           contactId: args.contactId || 'not provided',
           responseData: response.data,
         });
@@ -1350,31 +1189,43 @@ export class GHLConnector {
           data: {
             appointmentId: response.data?.id,
             calendarId,
-            calendarType,
             contactId: args.contactId || undefined,
             startTime: startTime.toISOString(),
             endTime: endTime.toISOString(),
-            message: `${calendarType === 'callback' ? 'Callback' : 'Appointment'} scheduled successfully`,
+            message: 'Appointment scheduled successfully',
           },
         };
       } else {
         const errorDetails = response.data ? JSON.stringify(response.data) : 'No error details';
         const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
-        Logger.error(`${logPrefix} ${error}`, { 
-          id, calendarId,
+        Logger.error('[CALENDAR] ' + error, { 
+          id, 
+          calendarId,
           contactId: args.contactId || 'not provided',
-          apiUrl, payload,
+          apiUrl,
+          payload,
           responseData: response.data,
           responseStatus: response.status,
           responseStatusText: response.statusText,
           fullResponse: JSON.stringify(response.data),
         });
-        return { id, ok: false, error: `${error}. Details: ${errorDetails}` };
+        return {
+          id,
+          ok: false,
+          error: `${error}. Details: ${errorDetails}`,
+        };
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      Logger.error(`${logPrefix} Error in schedule_${calendarType}`, { id, error: errorMessage });
-      return { id, ok: false, error: errorMessage };
+      Logger.error('[CALENDAR] Error in schedule_appointment', { 
+        id, 
+        error: errorMessage 
+      });
+      return {
+        id,
+        ok: false,
+        error: errorMessage,
+      };
     }
   }
 }

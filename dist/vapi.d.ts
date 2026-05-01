@@ -17,8 +17,10 @@ export declare class VapiWebhookHandler {
     private handleUpdateStage;
     private handleCheckCalendarAvailability;
     private handleScheduleAppointment;
-    private handleCheckCallbackAvailability;
-    private handleScheduleCallback;
+    private handleLookupCaller;
+    private handleSearchContact;
+    /** Safely convert a value that might be a string or array to a readable string. */
+    private stringifyField;
     private handleCallEnded;
     private handleEndOfCallReport;
     private processEndOfCallReport;

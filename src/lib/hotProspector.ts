@@ -1,0 +1,194 @@
+/**
+ * HotProspector API Client
+ *
+ * Reusable service for searching leads in HotProspector via their custom API.
+ * Endpoint: POST https://hotprospector.com/glu/custom_api
+ * Method  : SearchByUserInput
+ */
+
+import { Logger } from '../utils/logger.js';
+
+// ────────────────────────────── Types ──────────────────────────────
+
+export type HotProspectorCustomFields = {
+  where_is_your_pain_located?: string | string[];
+  have_you_had_an_mri?: string;
+  is__custom_valuescity__a_reasonable_commute_for_you?: string;
+  have_you_seen_a_doctor_for_your_pain_if_so_what_did_they_tell_you_?: string | string[];
+  have_you_tried_procedures_or_treatments_for_your_pain?: string | string[];
+  describe_your_symptoms_check_all_that_apply?: string | string[];
+  are_you_currently_taking_medications_for_your_pain?: string;
+  how_long_have_you_been_suffering_from_back_pain_disc_pain_or_sciatica?: string;
+  back__neck_sop_link?: string;
+  date?: string;
+  call_count?: string;
+  appointment_time?: string;
+  appointment_date?: string;
+  [key: string]: unknown; // allow other custom fields
+};
+
+export type HotProspectorLead = {
+  LeadId?: string;
+  GroupId?: string;
+  Tags?: string;
+  Firstname?: string;
+  Lastname?: string;
+  "E-Mail"?: string;
+  Phone?: string;
+  Mobile?: string;
+  CountryCode?: string;
+  Zipcode?: string;
+  City?: string;
+  State?: string;
+  Address?: string;
+  Company?: string;
+  Website?: string;
+  Lead_Custom_Fields?: HotProspectorCustomFields;
+  LocationId?: string;
+  [key: string]: unknown; // allow extra fields returned by HP
+};
+
+export type HotProspectorResponse = {
+  response: "true" | "false" | boolean;
+  Results?: HotProspectorLead[];
+  message?: string;
+};
+
+export type HotProspectorSearchResult = {
+  ok: boolean;
+  count: number;
+  lead: HotProspectorLead | null;
+};
+
+// ────────────────────────────── Helpers ─────────────────────────────
+
+/** Strip everything that is not a digit and return the last 10 digits.
+ * HP stores numbers in 10-digit US format without country code, so we
+ * always take the last 10 digits regardless of country code.
+ * e.g. +573008669878 → 3008669878, +13008669878 → 3008669878
+ */
+function digitsOnly(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  return digits.length >= 10 ? digits.slice(-10) : digits;
+}
+
+// ────────────────────────── Helpers ─────────────────────────────────
+
+/** Execute a single HP search request for a given searchText. */
+async function executeHPSearch(
+  api_uId: string,
+  api_key: string,
+  GroupId: string,
+  searchText: string,
+): Promise<HotProspectorSearchResult> {
+  const body: Record<string, string> = {
+    api_uId,
+    api_key,
+    GroupId,
+    searchField: "mobile",
+    searchText,
+    sortBy: "ASC",
+    Method: "SearchByUserInput",
+  };
+
+  const resp = await fetch("https://app.hotprospector.com/glu/custom_api", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    Logger.error("[HOTPROSPECTOR] HTTP error", {
+      status: resp.status,
+      body: text.substring(0, 500),
+    });
+    throw new Error(`HotProspector HTTP ${resp.status}: ${text}`);
+  }
+
+  const raw = await resp.json();
+  const data: HotProspectorResponse = Array.isArray(raw) ? raw[0] : raw;
+  const results = Array.isArray(data?.Results) ? data.Results : [];
+
+  return {
+    ok: data?.response === "true" || data?.response === true,
+    count: results.length,
+    lead: results[0] ?? null,
+  };
+}
+
+// ────────────────────────── Main function ───────────────────────────
+
+/**
+ * Search HotProspector by phone number.
+ * For international numbers, tries the full digit string first, then falls
+ * back to the last 10 digits (the format HP typically stores US numbers).
+ *
+ * @param inputPhone – any format (E.164, with spaces/dashes, etc.)
+ * @returns `{ ok, count, lead }` where `lead` is the first result (or null)
+ */
+export async function hotProspectorSearchByPhone(
+  inputPhone: string,
+): Promise<HotProspectorSearchResult> {
+  const api_uId = process.env.HP_API_UID;
+  const api_key = process.env.HP_API_KEY;
+  const GroupId = process.env.HP_GROUP_ID;
+
+  if (!api_uId || !api_key || !GroupId) {
+    const missing = [
+      !api_uId && "HP_API_UID",
+      !api_key && "HP_API_KEY",
+      !GroupId && "HP_GROUP_ID",
+    ].filter(Boolean);
+    const msg = `HotProspector config incomplete – missing: ${missing.join(", ")}`;
+    Logger.error("[HOTPROSPECTOR]" + msg);
+    throw new Error(msg);
+  }
+
+  const primaryPhone = digitsOnly(inputPhone);
+  const last10 = inputPhone.replace(/\D/g, "").slice(-10);
+  const needsFallback = primaryPhone !== last10 && last10.length === 10;
+
+  Logger.info("[HOTPROSPECTOR] Searching by phone", {
+    inputPhone,
+    primaryPhone,
+    last10Fallback: needsFallback ? last10 : null,
+    GroupId,
+  });
+
+  const result = await executeHPSearch(api_uId, api_key, GroupId, primaryPhone);
+
+  // If primary search returned no results and the number is international,
+  // retry with the last 10 digits (HP often stores numbers without country code).
+  if (result.count === 0 && needsFallback) {
+    Logger.info("[HOTPROSPECTOR] No result with full number, retrying with last 10 digits", {
+      primaryPhone,
+      last10,
+    });
+    const fallbackResult = await executeHPSearch(api_uId, api_key, GroupId, last10);
+
+    Logger.info("[HOTPROSPECTOR] Fallback search result", {
+      ok: fallbackResult.ok,
+      count: fallbackResult.count,
+      hasLead: !!fallbackResult.lead,
+      leadId: fallbackResult.lead?.LeadId,
+      leadName: fallbackResult.lead
+        ? `${fallbackResult.lead.Firstname ?? ""} ${fallbackResult.lead.Lastname ?? ""}`.trim()
+        : null,
+    });
+
+    return fallbackResult;
+  }
+
+  Logger.info("[HOTPROSPECTOR] Search result", {
+    ok: result.ok,
+    count: result.count,
+    hasLead: !!result.lead,
+    leadId: result.lead?.LeadId,
+    leadName: result.lead
+      ? `${result.lead.Firstname ?? ""} ${result.lead.Lastname ?? ""}`.trim()
+      : null,
+  });
+
+  return result;
+}

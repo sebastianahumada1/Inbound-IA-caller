@@ -7,6 +7,17 @@
  * Falls back to in-memory storage for local development if KV is not available.
  */
 import { Logger } from './logger.js';
+/**
+ * Safely parse a value that might already be an object (Vercel KV auto-deserializes)
+ * or might be a JSON string (in-memory storage stores raw strings).
+ */
+function safeParse(value) {
+    if (typeof value === 'string') {
+        return JSON.parse(value);
+    }
+    // Already an object (Vercel KV auto-parsed it)
+    return value;
+}
 // Try to import Vercel KV at runtime
 let kvStorage = null;
 let kvInitPromise = null;
@@ -204,7 +215,7 @@ export class StateStorage {
                 found: !!data,
                 storage: this.isKvAvailable() ? 'KV' : 'memory',
             });
-            return data ? JSON.parse(data) : null;
+            return data ? safeParse(data) : null;
         }
         catch (error) {
             Logger.error('[STATE_STORAGE] Failed to get tool call data', {
@@ -243,7 +254,7 @@ export class StateStorage {
         try {
             const key = `${this.prefix}:metadata:${callId}`;
             const data = await this.storage.get(key);
-            return data ? JSON.parse(data) : null;
+            return data ? safeParse(data) : null;
         }
         catch (error) {
             Logger.error('[STATE_STORAGE] Failed to get metadata', {
@@ -285,7 +296,7 @@ export class StateStorage {
         try {
             const key = `${this.prefix}:transcript:${callId}`;
             const existing = await this.storage.get(key);
-            const transcriptData = existing ? JSON.parse(existing) : { fullTranscript: '', chunks: [] };
+            const transcriptData = existing ? safeParse(existing) : { fullTranscript: '', chunks: [] };
             // Append to full transcript
             transcriptData.fullTranscript += (transcriptData.fullTranscript ? ' ' : '') + transcript;
             // Store chunk with role if provided
@@ -317,7 +328,7 @@ export class StateStorage {
             const data = await this.storage.get(key);
             if (!data)
                 return null;
-            const transcriptData = JSON.parse(data);
+            const transcriptData = safeParse(data);
             Logger.info('[STATE_STORAGE] Transcript retrieved', {
                 callId,
                 transcriptLength: transcriptData.fullTranscript?.length || 0,

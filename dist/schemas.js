@@ -52,8 +52,7 @@ export const VapiToolCallsMessageSchema = z.object({
     call: z.object({
         id: z.string().optional(),
         assistantId: z.string().optional(),
-        metadata: z.record(z.any()).optional(),
-    }).passthrough().optional(),
+    }).optional(),
 });
 export const VapiCallEndedMessageSchema = z.object({
     type: z.literal('call.ended'),
@@ -125,6 +124,18 @@ export const VapiGhlToolMessageSchema = z.object({
     timestamp: z.number().optional(),
     metadata: z.record(z.any()).optional(),
 });
+export const VapiAssistantStartedMessageSchema = z.object({
+    type: z.literal('assistant.started'),
+    call: z.object({
+        id: z.string(),
+    }).passthrough().optional(),
+    timestamp: z.number().optional(),
+    newAssistant: z.record(z.any()).optional(),
+    artifact: z.record(z.any()).optional(),
+    phoneNumber: z.record(z.any()).optional(),
+    customer: z.record(z.any()).optional(),
+    assistant: z.record(z.any()).optional(),
+}).passthrough();
 export const VapiWebhookMessageSchema = z.discriminatedUnion('type', [
     VapiToolCallsMessageSchema,
     VapiCallEndedMessageSchema,
@@ -133,6 +144,7 @@ export const VapiWebhookMessageSchema = z.discriminatedUnion('type', [
     VapiStatusUpdateMessageSchema,
     VapiMetadataMessageSchema,
     VapiGhlToolMessageSchema,
+    VapiAssistantStartedMessageSchema,
 ]);
 export const VapiWebhookBodySchema = z.object({
     message: VapiWebhookMessageSchema,
@@ -194,29 +206,11 @@ export const ScheduleAppointmentArgsSchema = z.object({
     endTime: z.string().min(1),
     notes: z.string().optional().default(''),
 });
-export const CheckCallbackAvailabilityArgsSchema = z.object({
-    dateTime: z.string().min(1),
-    durationMinutes: z.number().optional().default(15),
+export const LookupCallerArgsSchema = z.object({
+    phone: z.string().min(1),
 });
-export const ScheduleCallbackArgsSchema = z.object({
-    contactId: z.string().optional(),
-    name: z.string().min(1),
-    phone: z.string().optional(),
-    startTime: z.string().min(1),
-    endTime: z.string().min(1),
-    notes: z.string().optional().default(''),
-});
-export const CheckGabrielAvailabilityArgsSchema = z.object({
-    dateTime: z.string().min(1),
-    durationMinutes: z.number().optional().default(30),
-});
-export const ScheduleGabrielArgsSchema = z.object({
-    contactId: z.string().optional(),
-    name: z.string().min(1),
-    phone: z.string().optional(),
-    startTime: z.string().min(1),
-    endTime: z.string().min(1),
-    notes: z.string().optional().default(''),
+export const SearchContactArgsSchema = z.object({
+    query: z.string().min(1),
 });
 // Response schemas
 export const ToolResultSchema = z.object({
