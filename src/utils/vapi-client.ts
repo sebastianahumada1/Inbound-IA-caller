@@ -294,6 +294,11 @@ export class VapiApiClient {
         }
       }
 
+      // Fallback: use standard analysis summary if structured outputs had nothing
+      if (!structuredSummary && callData?.analysis?.summary) {
+        structuredSummary = callData.analysis.summary;
+      }
+
       Logger.info('[VAPI_CLIENT] Call metadata extracted', {
         callId,
         hasMetadata: Object.keys(metadata).length > 0,

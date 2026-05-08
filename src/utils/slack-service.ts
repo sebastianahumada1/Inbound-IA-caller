@@ -245,9 +245,20 @@ export class SlackService {
       message += `*Date:* ${formattedDate}\n`;
       message += `*Call recording:* ${recordingUrl}`;
 
-      // Send the message
+      // Use client-specific channel if configured, otherwise fall back to default
+      const clientChannelId = assistantId
+        ? ClientConfigManager.getSlackChannelId(assistantId) || this.defaultChannelId
+        : this.defaultChannelId;
+
+      Logger.info('[SLACK_SERVICE] Resolved Slack channel', {
+        callId,
+        clientName,
+        channelId: clientChannelId,
+        isClientSpecific: clientChannelId !== this.defaultChannelId,
+      });
+
       await this.sendMessage({
-        channelId: this.defaultChannelId,
+        channelId: clientChannelId,
         text: message,
       });
 
