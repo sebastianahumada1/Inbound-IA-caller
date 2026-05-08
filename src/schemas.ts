@@ -235,6 +235,17 @@ export const SearchContactArgsSchema = z.object({
   query: z.string().min(1),
 });
 
+export const DdpCheckContactArgsSchema = z.object({
+  phone: z.string().min(1),
+});
+
+export const DdpCreateContactArgsSchema = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  phone: z.string().min(1),
+  email: z.string().email().optional(),
+});
+
 // Response schemas
 export const ToolResultSchema = z.object({
   id: z.string(),
@@ -261,6 +272,8 @@ export type CheckCalendarAvailabilityArgs = z.infer<typeof CheckCalendarAvailabi
 export type ScheduleAppointmentArgs = z.infer<typeof ScheduleAppointmentArgsSchema>;
 export type LookupCallerArgs = z.infer<typeof LookupCallerArgsSchema>;
 export type SearchContactArgs = z.infer<typeof SearchContactArgsSchema>;
+export type DdpCheckContactArgs = z.infer<typeof DdpCheckContactArgsSchema>;
+export type DdpCreateContactArgs = z.infer<typeof DdpCreateContactArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;
 

@@ -19,6 +19,8 @@ import {
   ScheduleAppointmentArgsSchema,
   LookupCallerArgsSchema,
   SearchContactArgsSchema,
+  DdpCheckContactArgsSchema,
+  DdpCreateContactArgsSchema,
   ToolResult,
   WebhookResponse,
 } from './schemas.js';
@@ -305,7 +307,13 @@ export class VapiWebhookHandler {
         case 'premier_inbound_contactid':
         case 'inbound_contactid':
           return await this.handleSearchContact(id, args, callId, assistantId);
-        
+
+        case 'ddp_check_contact':
+          return await this.handleDdpCheckContact(id, args, callId, assistantId, customerPhone);
+
+        case 'ddp_create_contact':
+          return await this.handleDdpCreateContact(id, args, callId, assistantId);
+
         default:
           Logger.warn('Unknown tool name', { id, name });
           return {
@@ -731,6 +739,153 @@ export class VapiWebhookHandler {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       Logger.error('[SEARCH_CONTACT] Error during search', { id, callId, error: errorMessage });
       return { id, ok: false, error: `Search failed: ${errorMessage}` };
+    }
+  }
+
+  // ── DDP: Check if contact exists ───────────────────────────────────
+  private async handleDdpCheckContact(id: string, args: any, callId?: string, assistantId?: string, customerPhone?: string | null): Promise<ToolResult> {
+    try {
+      const validatedArgs = DdpCheckContactArgsSchema.parse(args);
+      const phone = customerPhone || validatedArgs.phone;
+
+      const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+      const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId)) || process.env.GHL_LOCATION_ID;
+
+      if (!apiKey || !locationId) {
+        Logger.error('[DDP_CHECK_CONTACT] Missing credentials', { hasApiKey: !!apiKey, hasLocationId: !!locationId });
+        return { id, ok: false, error: 'DDP GHL credentials not configured' };
+      }
+
+      Logger.info('[DDP_CHECK_CONTACT] Searching contact by phone', { callId, phone });
+
+      const url = `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${encodeURIComponent(phone)}`;
+      const resp = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Version': '2021-07-28' },
+      });
+
+      const data = await resp.json() as any;
+
+      if (!resp.ok) {
+        Logger.error('[DDP_CHECK_CONTACT] GHL API error', { status: resp.status, data });
+        return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+      }
+
+      const contact = data.contacts?.[0];
+
+      if (!contact) {
+        Logger.info('[DDP_CHECK_CONTACT] Contact not found', { callId, phone });
+        return {
+          id, ok: true,
+          data: { found: false, phone, message: 'No contact found for this phone number.' },
+        };
+      }
+
+      Logger.info('[DDP_CHECK_CONTACT] Contact found', { callId, contactId: contact.id });
+
+      if (callId) {
+        const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+        await this.stateStorage.storeCallMetadata(callId, {
+          ...existing,
+          contactId: contact.id,
+          firstName: existing.firstName || contact.firstName || '',
+          lastName: existing.lastName || contact.lastName || '',
+          email: existing.email || contact.email || '',
+          phone: existing.phone || contact.phone || '',
+        });
+      }
+
+      return {
+        id, ok: true,
+        data: {
+          found: true,
+          contactId: contact.id,
+          firstName: contact.firstName ?? '',
+          lastName: contact.lastName ?? '',
+          email: contact.email ?? '',
+          phone: contact.phone ?? '',
+        },
+      };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+      }
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[DDP_CHECK_CONTACT] Error', { id, callId, error: msg });
+      return { id, ok: false, error: `Check contact failed: ${msg}` };
+    }
+  }
+
+  // ── DDP: Create contact ────────────────────────────────────────────
+  private async handleDdpCreateContact(id: string, args: any, callId?: string, assistantId?: string): Promise<ToolResult> {
+    try {
+      const validatedArgs = DdpCreateContactArgsSchema.parse(args);
+
+      const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+      const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId)) || process.env.GHL_LOCATION_ID;
+
+      if (!apiKey || !locationId) {
+        Logger.error('[DDP_CREATE_CONTACT] Missing credentials', { hasApiKey: !!apiKey, hasLocationId: !!locationId });
+        return { id, ok: false, error: 'DDP GHL credentials not configured' };
+      }
+
+      Logger.info('[DDP_CREATE_CONTACT] Creating contact', { callId, phone: validatedArgs.phone });
+
+      const body: Record<string, string> = { locationId, phone: validatedArgs.phone };
+      if (validatedArgs.firstName) body.firstName = validatedArgs.firstName;
+      if (validatedArgs.lastName) body.lastName = validatedArgs.lastName;
+      if (validatedArgs.email) body.email = validatedArgs.email;
+
+      const resp = await fetch('https://services.leadconnectorhq.com/contacts/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await resp.json() as any;
+
+      if (!resp.ok) {
+        Logger.error('[DDP_CREATE_CONTACT] GHL API error', { status: resp.status, data });
+        return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+      }
+
+      const contact = data.contact ?? data;
+
+      Logger.info('[DDP_CREATE_CONTACT] Contact created', { callId, contactId: contact.id });
+
+      if (callId) {
+        const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+        await this.stateStorage.storeCallMetadata(callId, {
+          ...existing,
+          contactId: contact.id,
+          firstName: contact.firstName || validatedArgs.firstName || '',
+          lastName: contact.lastName || validatedArgs.lastName || '',
+          email: contact.email || validatedArgs.email || '',
+          phone: contact.phone || validatedArgs.phone || '',
+        });
+      }
+
+      return {
+        id, ok: true,
+        data: {
+          created: true,
+          contactId: contact.id,
+          firstName: contact.firstName ?? '',
+          lastName: contact.lastName ?? '',
+          email: contact.email ?? '',
+          phone: contact.phone ?? '',
+        },
+      };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+      }
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[DDP_CREATE_CONTACT] Error', { id, callId, error: msg });
+      return { id, ok: false, error: `Create contact failed: ${msg}` };
     }
   }
 
