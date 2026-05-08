@@ -111,6 +111,7 @@ export class SlackService {
       
       // Get client name from assistant ID
       const clientName = assistantId ? ClientConfigManager.getClientName(assistantId) : 'Unknown Client';
+      const displayName = clientName === 'DDP' ? 'DDP Inbound' : clientName;
       
       // DEBUG: Log all available data structures
       Logger.info('[SLACK_SERVICE] DEBUG - Available data structures', {
@@ -232,7 +233,7 @@ export class SlackService {
 
       // Build the message with exact format requested
       let message = `<!channel> New Call Recording & Report Just Dropped\n\n`;
-      message += `*Practice Name:* ${clientName}\n`;
+      message += `*Practice Name:* ${displayName}\n`;
       message += `*Name:* ${fullName}\n`;
       message += `*Email:* ${leadEmail}\n`;
       message += `*Phone:* ${leadPhone}\n`;
