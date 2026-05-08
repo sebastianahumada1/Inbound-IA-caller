@@ -294,10 +294,12 @@ export class VapiWebhookHandler {
         
         case 'check_calendar_availability':
         case 'check_calendar_availability_inbound':
+        case 'check_ddp_availability_inbound':
           return await this.handleCheckCalendarAvailability(id, args, callId);
-        
+
         case 'schedule_appointment':
         case 'schedule_appointment_inbound':
+        case 'schedule_ddp_inbound':
           return await this.handleScheduleAppointment(id, args, ghlMetadata, callId);
 
         case 'lookup_caller':
