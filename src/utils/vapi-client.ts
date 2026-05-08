@@ -282,14 +282,33 @@ export class VapiApiClient {
       const metadata = callData?.metadata || {};
       const ghlMetadata = metadata?.ghl || null;
 
-      // Extract structured outputs from artifact (e.g. "Call Summary" schema)
+      // Extract structured outputs from artifact (e.g. "Call Summary" schema).
+      // Per VAPI docs, shape is { [outputId]: { name, result } } where `result`
+      // matches the configured JSON schema — usually an object, sometimes a string.
       const structuredOutputs = callData?.artifact?.structuredOutputs || null;
       let structuredSummary: string | null = null;
       if (structuredOutputs && typeof structuredOutputs === 'object') {
         for (const output of Object.values(structuredOutputs) as any[]) {
-          if (typeof output?.result === 'string' && output.result.length > 0) {
-            structuredSummary = output.result;
+          const result = output?.result;
+          if (typeof result === 'string' && result.length > 0) {
+            structuredSummary = result;
             break;
+          }
+          if (result && typeof result === 'object') {
+            const summaryKeys = ['summary', 'Summary', 'callSummary', 'call_summary', 'Call Summary'];
+            const hit = summaryKeys.find(k => typeof result[k] === 'string' && result[k].length > 0);
+            if (hit) {
+              structuredSummary = result[hit];
+              break;
+            }
+            // Fallback: pick the longest string value in the result object
+            const longest = Object.values(result)
+              .filter((v): v is string => typeof v === 'string' && v.length > 0)
+              .sort((a, b) => b.length - a.length)[0];
+            if (longest) {
+              structuredSummary = longest;
+              break;
+            }
           }
         }
       }
