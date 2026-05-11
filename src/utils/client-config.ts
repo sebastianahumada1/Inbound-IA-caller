@@ -13,6 +13,7 @@ export interface ClientConfig {
   ghlApiKey: string;
   calendarId?: string;
   callbackCalendarId?: string;
+  gabrielCalendarId?: string;
   locationId?: string;
   slackChannelId?: string;
 }
@@ -196,6 +197,8 @@ export class ClientConfigManager {
         assistantIdVar: 'DDP_ASSISTANT_ID',
         apiKeyVar: 'DDP_GHL_API_KEY',
         calendarIdVar: 'DDP_CALENDAR_ID',
+        calendarIdCallbackVar: 'DDP_CALLBACK_CALENDAR_ID',
+        calendarIdGabrielVar: 'DDP_GABRIEL_CALENDAR_ID',
         locationIdVar: 'DDP_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_DDP',
       },
@@ -238,6 +241,14 @@ export class ClientConfigManager {
         const callbackCalendarId = process.env[clientDef.calendarIdCallbackVar];
         if (callbackCalendarId) {
           config.callbackCalendarId = callbackCalendarId;
+        }
+      }
+
+      // Add optional Gabriel calendar ID if configured (DDP routing for <$40K collections)
+      if ('calendarIdGabrielVar' in clientDef && clientDef.calendarIdGabrielVar) {
+        const gabrielCalendarId = process.env[clientDef.calendarIdGabrielVar];
+        if (gabrielCalendarId) {
+          config.gabrielCalendarId = gabrielCalendarId;
         }
       }
 
@@ -434,6 +445,14 @@ export class ClientConfigManager {
   static getCallbackCalendarId(assistantId: string): string | undefined {
     const config = this.getConfigByAssistantId(assistantId);
     return config?.callbackCalendarId;
+  }
+
+  /**
+   * Get Gabriel Calendar ID by Assistant ID (DDP routing for <$40K collections)
+   */
+  static getGabrielCalendarId(assistantId: string): string | undefined {
+    const config = this.getConfigByAssistantId(assistantId);
+    return config?.gabrielCalendarId;
   }
 
   /**

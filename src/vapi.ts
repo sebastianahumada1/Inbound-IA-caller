@@ -297,10 +297,23 @@ export class VapiWebhookHandler {
         case 'check_ddp_availability_inbound':
           return await this.handleCheckCalendarAvailability(id, args, callId);
 
+        case 'check_gabriel_availability_inbound':
+          return await this.handleCheckCalendarAvailability(id, args, callId, 'gabriel');
+
+        case 'check_callback_availability_inbound':
+          return await this.handleCheckCalendarAvailability(id, args, callId, 'callback');
+
         case 'schedule_appointment':
         case 'schedule_appointment_inbound':
         case 'schedule_ddp_inbound':
           return await this.handleScheduleAppointment(id, args, ghlMetadata, callId);
+
+        case 'schedule_gabriel':
+        case 'schedule_gabriel_inbound':
+          return await this.handleScheduleAppointment(id, args, ghlMetadata, callId, 'gabriel');
+
+        case 'schedule_callback_inbound':
+          return await this.handleScheduleAppointment(id, args, ghlMetadata, callId, 'callback');
 
         case 'lookup_caller':
           return await this.handleLookupCaller(id, args, callId, customerPhone);
@@ -420,10 +433,10 @@ export class VapiWebhookHandler {
     }
   }
 
-  private async handleCheckCalendarAvailability(id: string, args: any, callId?: string): Promise<ToolResult> {
+  private async handleCheckCalendarAvailability(id: string, args: any, callId?: string, calendarType: 'main' | 'gabriel' | 'callback' = 'main'): Promise<ToolResult> {
     try {
       const validatedArgs = CheckCalendarAvailabilityArgsSchema.parse(args);
-      return await this.ghlConnector.checkCalendarAvailability(id, validatedArgs, callId, this.stateStorage);
+      return await this.ghlConnector.checkCalendarAvailability(id, validatedArgs, callId, this.stateStorage, calendarType);
     } catch (error) {
       if (error instanceof ZodError) {
         Logger.error('Invalid check_calendar_availability arguments', { id, errors: error.issues });
@@ -437,10 +450,10 @@ export class VapiWebhookHandler {
     }
   }
 
-  private async handleScheduleAppointment(id: string, args: any, ghlMetadata?: any, callId?: string): Promise<ToolResult> {
+  private async handleScheduleAppointment(id: string, args: any, ghlMetadata?: any, callId?: string, calendarType: 'main' | 'gabriel' | 'callback' = 'main'): Promise<ToolResult> {
     try {
       const validatedArgs = ScheduleAppointmentArgsSchema.parse(args);
-      return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata, callId, this.stateStorage);
+      return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata, callId, this.stateStorage, calendarType);
     } catch (error) {
       if (error instanceof ZodError) {
         Logger.error('Invalid schedule_appointment arguments', { id, errors: error.issues });

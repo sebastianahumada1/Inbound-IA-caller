@@ -139,23 +139,42 @@ export class GHLConnector {
   }
 
   /**
-   * Get the Calendar ID based on Assistant ID
+   * Get the Calendar ID based on Assistant ID and optional calendar type.
+   * - 'main' (default): primary client calendar
+   * - 'gabriel': DDP secondary calendar (collections under $40K)
+   * - 'callback': callback/recall calendar
    */
-  private getCalendarId(): string | null {
-    if (this.assistantId) {
-      const calendarId = ClientConfigManager.getCalendarId(this.assistantId);
-      if (calendarId) {
-        Logger.info('[GHL_CONNECTOR] Using client-specific calendar ID', {
-          assistantId: this.assistantId,
-          clientName: ClientConfigManager.getClientName(this.assistantId),
-          calendarId,
-        });
-        return calendarId;
-      }
+  private getCalendarId(calendarType: 'main' | 'gabriel' | 'callback' = 'main'): string | null {
+    if (!this.assistantId) {
+      Logger.warn('[GHL_CONNECTOR] No assistantId set on connector');
+      return null;
+    }
+
+    let calendarId: string | undefined;
+    switch (calendarType) {
+      case 'gabriel':
+        calendarId = ClientConfigManager.getGabrielCalendarId(this.assistantId);
+        break;
+      case 'callback':
+        calendarId = ClientConfigManager.getCallbackCalendarId(this.assistantId);
+        break;
+      default:
+        calendarId = ClientConfigManager.getCalendarId(this.assistantId);
+    }
+
+    if (calendarId) {
+      Logger.info('[GHL_CONNECTOR] Using calendar ID', {
+        assistantId: this.assistantId,
+        clientName: ClientConfigManager.getClientName(this.assistantId),
+        calendarType,
+        calendarId,
+      });
+      return calendarId;
     }
 
     Logger.warn('[GHL_CONNECTOR] No calendar ID found for assistant', {
       assistantId: this.assistantId,
+      calendarType,
     });
     return null;
   }
@@ -512,9 +531,9 @@ export class GHLConnector {
     }
   }
 
-  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any): Promise<ToolResult> {
+  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any, calendarType: 'main' | 'gabriel' | 'callback' = 'main'): Promise<ToolResult> {
     try {
-      Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args });
+      Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args, calendarType });
 
       const ghlApiKey = this.getGHLApiKey();
       if (!ghlApiKey) {
@@ -527,7 +546,7 @@ export class GHLConnector {
         };
       }
 
-      const calendarId = this.getCalendarId();
+      const calendarId = this.getCalendarId(calendarType);
       if (!calendarId) {
         const error = 'Calendar ID not configured for this client';
         Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
@@ -700,11 +719,12 @@ export class GHLConnector {
     }
   }
 
-  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any): Promise<ToolResult> {
+  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any, calendarType: 'main' | 'gabriel' | 'callback' = 'main'): Promise<ToolResult> {
     try {
-      Logger.info('[CALENDAR] Processing schedule_appointment', { 
-        id, 
-        args, 
+      Logger.info('[CALENDAR] Processing schedule_appointment', {
+        id,
+        args,
+        calendarType,
         hasGhlMetadata: !!ghlMetadata,
         ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
         ghlMetadataContact: ghlMetadata?.contact ? {
@@ -730,10 +750,10 @@ export class GHLConnector {
         };
       }
 
-      const calendarId = this.getCalendarId();
+      const calendarId = this.getCalendarId(calendarType);
       if (!calendarId) {
         const error = 'Calendar ID not configured for this client';
-        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+        Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId, calendarType });
         return {
           id,
           ok: false,
