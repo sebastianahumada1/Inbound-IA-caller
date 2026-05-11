@@ -111,7 +111,7 @@ export class SlackService {
       
       // Get client name from assistant ID
       const clientName = assistantId ? ClientConfigManager.getClientName(assistantId) : 'Unknown Client';
-      const displayName = clientName === 'DDP' ? 'DDP Inbound' : clientName;
+      const displayName = clientName.includes('Inbound') ? clientName : `${clientName} Inbound`;
       
       // DEBUG: Log all available data structures
       Logger.info('[SLACK_SERVICE] DEBUG - Available data structures', {
