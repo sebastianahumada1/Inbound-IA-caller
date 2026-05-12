@@ -581,10 +581,12 @@ export class GHLConnector {
       // Calculate end time based on duration
       const endDate = new Date(requestedDate.getTime() + (args.durationMinutes || 30) * 60000);
 
-      // Query GHL Calendar API for free slots
-      // We'll check a range around the requested time
-      const startDate = new Date(requestedDate.getTime() - 60 * 60000); // 1 hour before
-      const endDateRange = new Date(requestedDate.getTime() + 2 * 60 * 60000); // 2 hours after
+      // Query GHL Calendar API for free slots over a full day window around the
+      // requested time. The previous narrow ±3h range caused false "no open slots
+      // for this day" responses whenever the calendar had slots outside that
+      // window, forcing the AI to blindly guess different times.
+      const startDate = new Date(requestedDate.getTime() - 24 * 60 * 60000); // 24h before
+      const endDateRange = new Date(requestedDate.getTime() + 24 * 60 * 60000); // 24h after
 
       const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
       const params = new URLSearchParams({
@@ -638,57 +640,73 @@ export class GHLConnector {
         responseDataType: typeof response.data,
       });
 
-      // GHL returns slots organized by date: { "2025-12-23": { "slots": [...] } }
-      // Extract the date key for the requested date (format: YYYY-MM-DD)
-      const requestedDateKey = requestedDate.toISOString().split('T')[0];
-      
-      // Get slots for the requested date
-      const dateSlots = requestedDateKey && response.data ? response.data[requestedDateKey] : null;
-      const freeSlots = dateSlots?.slots || [];
-      
+      // GHL groups slots by date in the calendar's own timezone:
+      //   { "2026-05-14": { "slots": ["2026-05-14T10:00:00-04:00", ...] }, ... }
+      // To avoid UTC date-key drift (e.g. 10pm EDT = 2am UTC next day) we
+      // flatten every date key in the response into one list and then filter
+      // by the offset embedded in each slot's ISO string.
+      const responseData = response.data && typeof response.data === 'object' ? response.data as Record<string, any> : {};
+      const allSlots: string[] = [];
+      const dateKeysWithSlots: string[] = [];
+      for (const [key, value] of Object.entries(responseData)) {
+        if (value && typeof value === 'object' && Array.isArray((value as any).slots)) {
+          const slots = (value as any).slots as string[];
+          if (slots.length > 0) {
+            dateKeysWithSlots.push(key);
+            allSlots.push(...slots);
+          }
+        }
+      }
+
+      // Extract the local date portion (YYYY-MM-DD) using the offset embedded
+      // in each ISO string, so we compare apples to apples regardless of TZ.
+      const localDateOf = (iso: string): string => iso.slice(0, 10);
+      const requestedLocalDate = localDateOf(args.dateTime);
+
+      const slotsForRequestedDay = allSlots
+        .filter(s => localDateOf(s) === requestedLocalDate)
+        .sort();
+
       Logger.info('[CALENDAR] Free slots from GHL', {
         id,
-        requestedDateKey,
-        freeSlotsCount: freeSlots.length,
-        freeSlots: freeSlots,
+        requestedLocalDate,
+        dateKeysWithSlots,
+        totalSlotsReturned: allSlots.length,
+        slotsForRequestedDayCount: slotsForRequestedDay.length,
+        slotsForRequestedDay,
         requestedDate: requestedDate.toISOString(),
-        requestedDateTimestamp: requestedDate.getTime(),
         endDate: endDate.toISOString(),
-        endDateTimestamp: endDate.getTime(),
       });
 
-      // GHL returns slots as ISO string times (e.g., "2025-12-23T10:00:00-05:00")
-      // Check if the requested time matches any of the available slot start times
-      // Since slots are 30-minute intervals, we check if requestedDate matches a slot start time
-      const isAvailable = freeSlots.some((slotTime: string) => {
+      // Compare slot start times to the requested time with 1-minute tolerance
+      const isAvailable = slotsForRequestedDay.some((slotTime: string) => {
         const slotDate = new Date(slotTime);
-        
-        // Check if the requested time matches the slot start time (within 1 minute tolerance)
         const timeDiff = Math.abs(requestedDate.getTime() - slotDate.getTime());
-        const matches = timeDiff < 60000; // 1 minute tolerance
-        
-        Logger.debug('[CALENDAR] Comparing slot', {
-          slotTime,
-          slotDate: slotDate.toISOString(),
-          slotDateTimestamp: slotDate.getTime(),
-          requestedDate: requestedDate.toISOString(),
-          requestedDateTimestamp: requestedDate.getTime(),
-          timeDiffMs: timeDiff,
-          matches,
-        });
-        
-        return matches;
+        return timeDiff < 60000;
       });
+
+      // Format slots in a human-friendly way (e.g. "10:00 AM") so the AI can
+      // read them directly to the doctor without parsing ISO strings.
+      const formatSlot = (iso: string): string => {
+        const offsetMatch = iso.match(/([+-]\d{2}:\d{2})$/);
+        const offset = offsetMatch ? offsetMatch[1] : '';
+        const parts = iso.slice(11, 16).split(':').map(Number);
+        const h = parts[0] ?? 0;
+        const m = parts[1] ?? 0;
+        const hr12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+        const ampm = h >= 12 ? 'PM' : 'AM';
+        return `${hr12}:${m.toString().padStart(2, '0')} ${ampm}${offset ? ` (${offset})` : ''}`;
+      };
+
+      const formattedSlotsForDay = slotsForRequestedDay.map(formatSlot);
+      const slotsForResponse = slotsForRequestedDay.slice(0, 10);
 
       Logger.info('[CALENDAR] Availability check completed', {
         id,
         requestedTime: requestedDate.toISOString(),
         isAvailable,
-        freeSlotsCount: freeSlots.length,
+        slotsForRequestedDayCount: slotsForRequestedDay.length,
       });
-
-      // When unavailable, include the actual available slots for the day so the AI can offer alternatives
-      const availableSlotsForDay = freeSlots.slice(0, 10); // up to 10 slots
 
       return {
         id,
@@ -698,11 +716,11 @@ export class GHLConnector {
           requestedTime: requestedDate.toISOString(),
           duration: args.durationMinutes || 30,
           message: isAvailable
-            ? 'The requested time slot is available'
-            : freeSlots.length > 0
-              ? `The requested time slot is not available. Available slots for this day: ${availableSlotsForDay.join(', ')}`
-              : 'The requested time slot is not available and there are no open slots for this day.',
-          ...(isAvailable ? {} : { availableSlots: availableSlotsForDay }),
+            ? 'The requested time slot is available.'
+            : slotsForRequestedDay.length > 0
+              ? `The requested time slot is not available. Other open slots on ${requestedLocalDate}: ${formattedSlotsForDay.slice(0, 10).join(', ')}.`
+              : `No open slots on ${requestedLocalDate}. Try a different day.`,
+          ...(isAvailable ? {} : { availableSlots: slotsForResponse, availableSlotsFormatted: formattedSlotsForDay.slice(0, 10) }),
         },
       };
     } catch (error) {

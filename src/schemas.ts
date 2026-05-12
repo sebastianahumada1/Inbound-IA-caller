@@ -246,6 +246,10 @@ export const DdpCreateContactArgsSchema = z.object({
   email: z.string().email().optional(),
 });
 
+export const DdpMarkTransferredArgsSchema = z.object({
+  contactId: z.string().optional(),
+});
+
 // Response schemas
 export const ToolResultSchema = z.object({
   id: z.string(),
@@ -274,6 +278,7 @@ export type LookupCallerArgs = z.infer<typeof LookupCallerArgsSchema>;
 export type SearchContactArgs = z.infer<typeof SearchContactArgsSchema>;
 export type DdpCheckContactArgs = z.infer<typeof DdpCheckContactArgsSchema>;
 export type DdpCreateContactArgs = z.infer<typeof DdpCreateContactArgsSchema>;
+export type DdpMarkTransferredArgs = z.infer<typeof DdpMarkTransferredArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;
 
