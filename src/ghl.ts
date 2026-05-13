@@ -581,12 +581,11 @@ export class GHLConnector {
       // Calculate end time based on duration
       const endDate = new Date(requestedDate.getTime() + (args.durationMinutes || 30) * 60000);
 
-      // Query GHL Calendar API for free slots over a full day window around the
-      // requested time. The previous narrow ±3h range caused false "no open slots
-      // for this day" responses whenever the calendar had slots outside that
-      // window, forcing the AI to blindly guess different times.
+      // Query GHL Calendar API for free slots over a wide window so that, when
+      // the requested day has nothing open, we can surface the next real slots
+      // to the AI instead of forcing it to blindly guess another day.
       const startDate = new Date(requestedDate.getTime() - 24 * 60 * 60000); // 24h before
-      const endDateRange = new Date(requestedDate.getTime() + 24 * 60 * 60000); // 24h after
+      const endDateRange = new Date(requestedDate.getTime() + 14 * 24 * 60 * 60000); // 14 days after
 
       const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
       const params = new URLSearchParams({
@@ -698,15 +697,73 @@ export class GHLConnector {
         return `${hr12}:${m.toString().padStart(2, '0')} ${ampm}${offset ? ` (${offset})` : ''}`;
       };
 
+      // Format a slot with its weekday + date so the AI can offer it from
+      // any day in the search window without having to compute the calendar
+      // day itself. The format is offset-agnostic: we shift the UTC instant
+      // by the embedded offset and then read fields in UTC, which yields the
+      // local wall-clock the slot was published in.
+      const formatSlotWithDate = (iso: string): string => {
+        const offsetMatch = iso.match(/([+-])(\d{2}):(\d{2})$/);
+        if (!offsetMatch) return iso;
+        const sign = offsetMatch[1] === '+' ? 1 : -1;
+        const oh = parseInt(offsetMatch[2] ?? '0', 10);
+        const om = parseInt(offsetMatch[3] ?? '0', 10);
+        const offsetMs = sign * (oh * 60 + om) * 60000;
+        const shifted = new Date(new Date(iso).getTime() + offsetMs);
+        const weekday = shifted.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+        const month = shifted.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+        const dayNum = shifted.getUTCDate();
+        const h24 = shifted.getUTCHours();
+        const m = shifted.getUTCMinutes();
+        const hr12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+        const ampm = h24 >= 12 ? 'PM' : 'AM';
+        return `${weekday}, ${month} ${dayNum} at ${hr12}:${m.toString().padStart(2, '0')} ${ampm}`;
+      };
+
       const formattedSlotsForDay = slotsForRequestedDay.map(formatSlot);
       const slotsForResponse = slotsForRequestedDay.slice(0, 10);
+
+      // When the requested day has no slots, surface the next real openings
+      // from the wider 14-day window so the AI can offer a concrete time
+      // instead of guessing another day blindly. Take up to 2 slots per day,
+      // max 8 total — enough real options without flooding the prompt.
+      const nextAvailableSlots: string[] = [];
+      const nextAvailableSlotsFormatted: string[] = [];
+      if (slotsForRequestedDay.length === 0) {
+        const requestedMs = requestedDate.getTime();
+        const upcoming = allSlots
+          .filter(s => {
+            const d = new Date(s).getTime();
+            return !Number.isNaN(d) && d >= requestedMs;
+          })
+          .sort();
+        const perDayCount = new Map<string, number>();
+        for (const slot of upcoming) {
+          const day = localDateOf(slot);
+          const count = perDayCount.get(day) ?? 0;
+          if (count >= 2) continue;
+          perDayCount.set(day, count + 1);
+          nextAvailableSlots.push(slot);
+          nextAvailableSlotsFormatted.push(formatSlotWithDate(slot));
+          if (nextAvailableSlots.length >= 8) break;
+        }
+      }
 
       Logger.info('[CALENDAR] Availability check completed', {
         id,
         requestedTime: requestedDate.toISOString(),
         isAvailable,
         slotsForRequestedDayCount: slotsForRequestedDay.length,
+        nextAvailableCount: nextAvailableSlots.length,
       });
+
+      const baseMessage = isAvailable
+        ? 'The requested time slot is available.'
+        : slotsForRequestedDay.length > 0
+          ? `The requested time slot is not available. Other open slots on ${requestedLocalDate}: ${formattedSlotsForDay.slice(0, 10).join(', ')}.`
+          : nextAvailableSlots.length > 0
+            ? `No open slots on ${requestedLocalDate}. The next available openings are: ${nextAvailableSlotsFormatted.join(', ')}. Offer one of these to the caller — do not invent other days or times.`
+            : `No open slots on ${requestedLocalDate} or within the next 14 days. Offer to transfer the caller or schedule a callback.`;
 
       return {
         id,
@@ -715,12 +772,16 @@ export class GHLConnector {
           available: isAvailable,
           requestedTime: requestedDate.toISOString(),
           duration: args.durationMinutes || 30,
-          message: isAvailable
-            ? 'The requested time slot is available.'
-            : slotsForRequestedDay.length > 0
-              ? `The requested time slot is not available. Other open slots on ${requestedLocalDate}: ${formattedSlotsForDay.slice(0, 10).join(', ')}.`
-              : `No open slots on ${requestedLocalDate}. Try a different day.`,
-          ...(isAvailable ? {} : { availableSlots: slotsForResponse, availableSlotsFormatted: formattedSlotsForDay.slice(0, 10) }),
+          message: baseMessage,
+          ...(isAvailable
+            ? {}
+            : {
+                availableSlots: slotsForResponse,
+                availableSlotsFormatted: formattedSlotsForDay.slice(0, 10),
+                ...(nextAvailableSlots.length > 0
+                  ? { nextAvailableSlots, nextAvailableSlotsFormatted }
+                  : {}),
+              }),
         },
       };
     } catch (error) {
