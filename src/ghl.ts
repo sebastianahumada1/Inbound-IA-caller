@@ -677,8 +677,17 @@ export class GHLConnector {
         endDate: endDate.toISOString(),
       });
 
-      // Compare slot start times to the requested time with 1-minute tolerance
+      // Compare slot start times to the requested time. We accept a match
+      // either by exact UTC instant (1-minute tolerance) OR by local wall
+      // clock (YYYY-MM-DDTHH:MM). The LLM frequently re-emits a slot with
+      // the doctor's local TZ offset (e.g. "-04:00") instead of the calendar's
+      // own offset (e.g. "-06:00") — different UTC moments but the same wall
+      // clock the doctor heard. Treating wall-clock matches as available keeps
+      // the booking flow accurate to what the doctor actually agreed to.
+      const wallClockOf = (iso: string): string => iso.slice(0, 16);
+      const requestedWallClock = wallClockOf(args.dateTime);
       const isAvailable = slotsForRequestedDay.some((slotTime: string) => {
+        if (wallClockOf(slotTime) === requestedWallClock) return true;
         const slotDate = new Date(slotTime);
         const timeDiff = Math.abs(requestedDate.getTime() - slotDate.getTime());
         return timeDiff < 60000;
@@ -1066,13 +1075,62 @@ export class GHLConnector {
       // GHL requires: /calendars/events/appointments with firstName, lastName, phone, selectedSlot
       const apiUrl = `https://services.leadconnectorhq.com/calendars/events/appointments`;
       
-      // GHL expects selectedSlot as ISO string with timezone
-      // Use correctedStartTime (already corrected above)
-      // If startTime is already in correct format, use it; otherwise convert
+      // GHL expects selectedSlot as ISO string with the calendar's own timezone
+      // offset. The LLM frequently re-emits a slot we returned in (e.g.) "-06:00"
+      // with the doctor's local offset (e.g. "-04:00") because it normalizes to
+      // the spoken timezone. That mismatch makes GHL reject the booking with
+      // "the slot you have selected is no longer available". Reconcile by
+      // querying free-slots for the requested day and matching on the local
+      // wall-clock (date + HH:MM) — that recovers the canonical ISO from GHL.
       let selectedSlot = correctedStartTime;
-      if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00') && !selectedSlot.includes('-06:00')) {
-        // If no timezone, assume EST and add it
-        const date = new Date(correctedStartTime);
+      try {
+        const dayStartMs = startTime.getTime() - 24 * 60 * 60000;
+        const dayEndMs = startTime.getTime() + 24 * 60 * 60000;
+        const slotsResp = await this.httpClient.get(
+          `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots?startDate=${dayStartMs}&endDate=${dayEndMs}`,
+          {
+            headers: {
+              'Authorization': `Bearer ${ghlApiKey}`,
+              'Content-Type': 'application/json',
+              'Version': '2021-07-28',
+            },
+          }
+        );
+        if (slotsResp.ok && slotsResp.data && typeof slotsResp.data === 'object') {
+          const flatSlots: string[] = [];
+          for (const v of Object.values(slotsResp.data as Record<string, any>)) {
+            if (v && Array.isArray((v as any).slots)) {
+              flatSlots.push(...((v as any).slots as string[]));
+            }
+          }
+          const requestedWallClock = correctedStartTime.slice(0, 16);
+          const match = flatSlots.find(s => s.slice(0, 16) === requestedWallClock);
+          if (match) {
+            Logger.info('[CALENDAR] Reconciled slot via wall-clock match', {
+              id,
+              requested: correctedStartTime,
+              resolved: match,
+            });
+            selectedSlot = match;
+          } else {
+            Logger.warn('[CALENDAR] No wall-clock match; will pass AI value as-is', {
+              id,
+              requested: correctedStartTime,
+              flatSlotsCount: flatSlots.length,
+              sampleSlots: flatSlots.slice(0, 5),
+            });
+          }
+        }
+      } catch (err) {
+        Logger.warn('[CALENDAR] Slot reconciliation failed; using AI value as-is', {
+          id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      // Fallback: if the slot still has no offset at all, assume EST.
+      if (!/[+-]\d{2}:\d{2}$/.test(selectedSlot)) {
+        const date = new Date(selectedSlot);
         selectedSlot = date.toISOString().replace('Z', '-05:00');
       }
 
