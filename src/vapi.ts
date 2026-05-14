@@ -22,6 +22,7 @@ import {
   DdpCheckContactArgsSchema,
   DdpCreateContactArgsSchema,
   DdpMarkTransferredArgsSchema,
+  DdpMarkTransferredSupportArgsSchema,
   ToolResult,
   WebhookResponse,
 } from './schemas.js';
@@ -332,6 +333,9 @@ export class VapiWebhookHandler {
 
         case 'ddp_mark_transferred':
           return await this.handleDdpMarkTransferred(id, args, callId, assistantId);
+
+        case 'ddp_mark_transferred_support':
+          return await this.handleDdpMarkTransferredSupport(id, args, callId, assistantId);
 
         default:
           Logger.warn('Unknown tool name', { id, name });
@@ -831,7 +835,10 @@ export class VapiWebhookHandler {
       const lastName = (contact.lastName ?? '').trim();
       const email = (contact.email ?? '').trim();
       const tags: string[] = Array.isArray(contact.tags) ? contact.tags : [];
-      const wasTransferred = tags.some(t => typeof t === 'string' && t.toLowerCase() === 'call_transferred');
+      const normalizedTags = tags.filter((t): t is string => typeof t === 'string').map(t => t.toLowerCase());
+      const wasTransferred = normalizedTags.includes('call_transferred');
+      const wasTransferredToSupport = normalizedTags.includes('support_transferred');
+      const isMember = normalizedTags.includes('ddp member active list');
       const isGhostContact = !firstName && !lastName && !email;
 
       if (isGhostContact) {
@@ -873,7 +880,11 @@ export class VapiWebhookHandler {
           phone: contact.phone ?? '',
           tags,
           wasTransferred,
-          ...(wasTransferred ? {
+          wasTransferredToSupport,
+          isMember,
+          ...(isMember ? {
+            message: 'This caller is an existing DDP member. Skip discovery, qualification, persona match, and value hook. Greet them by name, ask what they need help with, then call ddp_mark_transferred_support followed by transfer_call_tool_ddp_support.',
+          } : wasTransferred ? {
             message: 'This caller was previously transferred to a live agent who did not answer. Do not run the full discovery script — offer to book a callback using check_callback_availability_inbound and schedule_callback_inbound.',
           } : {}),
         },
@@ -1017,6 +1028,63 @@ export class VapiWebhookHandler {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       Logger.error('[DDP_MARK_TRANSFERRED] Error', { id, callId, error: msg });
       return { id, ok: false, error: `Mark transferred failed: ${msg}` };
+    }
+  }
+
+  // ── DDP: Mark caller transferred to customer support ──────────────
+  private async handleDdpMarkTransferredSupport(id: string, args: any, callId?: string, assistantId?: string): Promise<ToolResult> {
+    try {
+      const validatedArgs = DdpMarkTransferredSupportArgsSchema.parse(args);
+
+      let contactId = validatedArgs.contactId;
+      if (!contactId && callId) {
+        const metadata = await this.stateStorage.getCallMetadata(callId);
+        contactId = metadata?.contactId;
+      }
+
+      if (!contactId) {
+        Logger.error('[DDP_MARK_TRANSFERRED_SUPPORT] Missing contactId', { callId });
+        return { id, ok: false, error: 'contactId is required (none provided and none in call metadata).' };
+      }
+
+      const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+      if (!apiKey) {
+        Logger.error('[DDP_MARK_TRANSFERRED_SUPPORT] Missing credentials', { hasApiKey: !!apiKey });
+        return { id, ok: false, error: 'DDP GHL credentials not configured' };
+      }
+
+      Logger.info('[DDP_MARK_TRANSFERRED_SUPPORT] Adding support_transferred tag', { callId, contactId });
+
+      const resp = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/tags`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ tags: ['support_transferred'] }),
+      });
+
+      const data = await resp.json() as any;
+
+      if (!resp.ok) {
+        Logger.error('[DDP_MARK_TRANSFERRED_SUPPORT] GHL API error', { status: resp.status, data });
+        return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+      }
+
+      Logger.info('[DDP_MARK_TRANSFERRED_SUPPORT] Tag added', { callId, contactId });
+
+      return {
+        id, ok: true,
+        data: { tagged: true, contactId, tag: 'support_transferred' },
+      };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+      }
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[DDP_MARK_TRANSFERRED_SUPPORT] Error', { id, callId, error: msg });
+      return { id, ok: false, error: `Mark transferred support failed: ${msg}` };
     }
   }
 
