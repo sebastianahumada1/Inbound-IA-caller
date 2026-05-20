@@ -23,6 +23,8 @@ import {
   DdpCreateContactArgsSchema,
   DdpMarkTransferredArgsSchema,
   DdpMarkTransferredSupportArgsSchema,
+  CheckContactArgsSchema,
+  CreateContactArgsSchema,
   ToolResult,
   WebhookResponse,
 } from './schemas.js';
@@ -330,6 +332,12 @@ export class VapiWebhookHandler {
 
         case 'ddp_create_contact':
           return await this.handleDdpCreateContact(id, args, callId, assistantId);
+
+        case 'check_contact':
+          return await this.handleCheckContact(id, args, callId, assistantId, customerPhone);
+
+        case 'create_contact':
+          return await this.handleCreateContact(id, args, callId, assistantId);
 
         case 'ddp_mark_transferred':
           return await this.handleDdpMarkTransferred(id, args, callId, assistantId);
@@ -827,7 +835,7 @@ export class VapiWebhookHandler {
         Logger.info('[DDP_CHECK_CONTACT] Contact not found', { callId, phone });
         return {
           id, ok: true,
-          data: { found: false, phone, message: 'No contact found for this phone number. Ask the caller for first name, last name, and email before calling ddp_create_contact.' },
+          data: { found: false, phone, message: 'No contact found for this phone number. Ask the caller for first name and last name before calling ddp_create_contact.' },
         };
       }
 
@@ -850,7 +858,7 @@ export class VapiWebhookHandler {
           data: {
             found: false,
             phone,
-            message: 'No usable contact found for this phone number. Ask the caller for first name, last name, and email before calling ddp_create_contact.',
+            message: 'No usable contact found for this phone number. Ask the caller for first name and last name before calling ddp_create_contact.',
           },
         };
       }
@@ -970,6 +978,169 @@ export class VapiWebhookHandler {
       }
       const msg = error instanceof Error ? error.message : 'Unknown error';
       Logger.error('[DDP_CREATE_CONTACT] Error', { id, callId, error: msg });
+      return { id, ok: false, error: `Create contact failed: ${msg}` };
+    }
+  }
+
+  // ── Generic: Check if contact exists (multi-client) ────────────────
+  private async handleCheckContact(id: string, args: any, callId?: string, assistantId?: string, customerPhone?: string | null): Promise<ToolResult> {
+    try {
+      const validatedArgs = CheckContactArgsSchema.parse(args);
+      const search = customerPhone || validatedArgs.phone || validatedArgs.query;
+
+      if (!search) {
+        return { id, ok: false, error: 'A phone or query is required to check a contact' };
+      }
+
+      const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+      const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId)) || process.env.GHL_LOCATION_ID;
+
+      if (!apiKey || !locationId) {
+        Logger.error('[CHECK_CONTACT] Missing credentials', { hasApiKey: !!apiKey, hasLocationId: !!locationId });
+        return { id, ok: false, error: 'GHL credentials not configured' };
+      }
+
+      Logger.info('[CHECK_CONTACT] Searching contact', { callId, assistantId, search });
+
+      const url = `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${encodeURIComponent(search)}`;
+      const resp = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${apiKey}`, 'Version': '2021-07-28' },
+      });
+
+      const data = await resp.json() as any;
+
+      if (!resp.ok) {
+        Logger.error('[CHECK_CONTACT] GHL API error', { status: resp.status, data });
+        return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+      }
+
+      const contact = data.contacts?.[0];
+
+      if (!contact) {
+        Logger.info('[CHECK_CONTACT] Contact not found', { callId, search });
+        return { id, ok: true, data: { found: false, query: search } };
+      }
+
+      const firstName = (contact.firstName ?? '').trim();
+      const lastName = (contact.lastName ?? '').trim();
+      const email = (contact.email ?? '').trim();
+      const tags: string[] = Array.isArray(contact.tags) ? contact.tags : [];
+      const isGhostContact = !firstName && !lastName && !email;
+
+      if (isGhostContact) {
+        Logger.info('[CHECK_CONTACT] Ghost contact detected — treating as not found', { callId, contactId: contact.id, search });
+        return { id, ok: true, data: { found: false, query: search } };
+      }
+
+      Logger.info('[CHECK_CONTACT] Contact found', { callId, contactId: contact.id });
+
+      if (callId) {
+        const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+        await this.stateStorage.storeCallMetadata(callId, {
+          ...existing,
+          contactId: contact.id,
+          firstName: existing.firstName || firstName,
+          lastName: existing.lastName || lastName,
+          email: existing.email || email,
+          phone: existing.phone || contact.phone || '',
+        });
+      }
+
+      return {
+        id, ok: true,
+        data: {
+          found: true,
+          contactId: contact.id,
+          firstName,
+          lastName,
+          name: `${firstName} ${lastName}`.trim(),
+          email,
+          phone: contact.phone ?? '',
+          tags,
+        },
+      };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+      }
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[CHECK_CONTACT] Error', { id, callId, error: msg });
+      return { id, ok: false, error: `Check contact failed: ${msg}` };
+    }
+  }
+
+  // ── Generic: Create / upsert contact (multi-client) ────────────────
+  private async handleCreateContact(id: string, args: any, callId?: string, assistantId?: string): Promise<ToolResult> {
+    try {
+      const validatedArgs = CreateContactArgsSchema.parse(args);
+
+      const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+      const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId)) || process.env.GHL_LOCATION_ID;
+
+      if (!apiKey || !locationId) {
+        Logger.error('[CREATE_CONTACT] Missing credentials', { hasApiKey: !!apiKey, hasLocationId: !!locationId });
+        return { id, ok: false, error: 'GHL credentials not configured' };
+      }
+
+      Logger.info('[CREATE_CONTACT] Upserting contact', { callId, assistantId, phone: validatedArgs.phone });
+
+      const body: Record<string, string> = { locationId, phone: validatedArgs.phone };
+      if (validatedArgs.firstName) body.firstName = validatedArgs.firstName;
+      if (validatedArgs.lastName) body.lastName = validatedArgs.lastName;
+      if (validatedArgs.email) body.email = validatedArgs.email;
+
+      const resp = await fetch('https://services.leadconnectorhq.com/contacts/upsert', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await resp.json() as any;
+
+      if (!resp.ok) {
+        Logger.error('[CREATE_CONTACT] GHL API error', { status: resp.status, data });
+        return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+      }
+
+      const contact = data.contact ?? data;
+      const wasNew = data.new === true;
+
+      Logger.info('[CREATE_CONTACT] Contact upserted', { callId, contactId: contact.id, wasNew });
+
+      if (callId) {
+        const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+        await this.stateStorage.storeCallMetadata(callId, {
+          ...existing,
+          contactId: contact.id,
+          firstName: contact.firstName || validatedArgs.firstName || '',
+          lastName: contact.lastName || validatedArgs.lastName || '',
+          email: contact.email || validatedArgs.email || '',
+          phone: contact.phone || validatedArgs.phone || '',
+        });
+      }
+
+      return {
+        id, ok: true,
+        data: {
+          created: true,
+          wasNew,
+          contactId: contact.id,
+          firstName: contact.firstName ?? '',
+          lastName: contact.lastName ?? '',
+          email: contact.email ?? '',
+          phone: contact.phone ?? '',
+        },
+      };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+      }
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[CREATE_CONTACT] Error', { id, callId, error: msg });
       return { id, ok: false, error: `Create contact failed: ${msg}` };
     }
   }

@@ -1,0 +1,140 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "schedule_appointment_inbound",
+      "description": "Agenda una cita en el calendario principal del cliente. Llama esta tool solo después de confirmar disponibilidad con check_ddp_availability_inbound y de obtener la confirmación del paciente. ANTES de llamar esta tool, pide al paciente su correo electrónico — es obligatorio para esta tool aunque no se haya pedido antes en la llamada. El email se guarda en el contacto de GHL antes de crear la cita.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "startTime",
+          "endTime"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nombre completo del paciente/cliente."
+          },
+          "email": {
+            "type": "string",
+            "description": "Correo electrónico del paciente, recolectado durante la llamada. OBLIGATORIO antes de agendar — si no lo tienes, pídelo conversacionalmente antes de llamar esta tool."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Número de teléfono del paciente (opcional, pero recomendado si está disponible en el contexto de la llamada)."
+          },
+          "contactId": {
+            "type": "string",
+            "description": "ID del contacto en GHL si está disponible (opcional)."
+          },
+          "startTime": {
+            "type": "string",
+            "description": "Fecha y hora de inicio EXACTA que el usuario solicitó, en formato ISO 8601 con la zona horaria del cliente. CRÍTICO: usa la hora EXACTA que mencionó el usuario — NO conviertas a UTC. Si dijo '10 AM' envía '10:00:00' en su timezone (ej: '2026-01-28T10:00:00-06:00'). NUNCA uses formato UTC (Z)."
+          },
+          "endTime": {
+            "type": "string",
+            "description": "Fecha y hora de fin en formato ISO 8601 con la misma zona horaria que startTime. Calcula endTime = startTime + duración de la cita."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notas adicionales sobre la cita (opcional)."
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "schedule_gabriel_inbound",
+      "description": "Agenda una cita en el calendario de Gabriel (para colecciones menores a $40K). Llama esta tool solo después de confirmar disponibilidad con check_gabriel_availability_inbound y de obtener la confirmación del paciente. ANTES de llamar esta tool, pide al paciente su correo electrónico — es obligatorio para esta tool aunque no se haya pedido antes en la llamada. El email se guarda en el contacto de GHL antes de crear la cita.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "startTime",
+          "endTime"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nombre completo del paciente/cliente."
+          },
+          "email": {
+            "type": "string",
+            "description": "Correo electrónico del paciente, recolectado durante la llamada. OBLIGATORIO antes de agendar — si no lo tienes, pídelo conversacionalmente antes de llamar esta tool."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Número de teléfono del paciente (opcional, pero recomendado si está disponible en el contexto de la llamada)."
+          },
+          "contactId": {
+            "type": "string",
+            "description": "ID del contacto en GHL si está disponible (opcional)."
+          },
+          "startTime": {
+            "type": "string",
+            "description": "Fecha y hora de inicio EXACTA que el usuario solicitó, en formato ISO 8601 con la zona horaria del cliente. CRÍTICO: usa la hora EXACTA que mencionó el usuario — NO conviertas a UTC. Si dijo '10 AM' envía '10:00:00' en su timezone (ej: '2026-01-28T10:00:00-06:00'). NUNCA uses formato UTC (Z)."
+          },
+          "endTime": {
+            "type": "string",
+            "description": "Fecha y hora de fin en formato ISO 8601 con la misma zona horaria que startTime. Calcula endTime = startTime + duración (típicamente 30 minutos)."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notas adicionales sobre la cita (opcional)."
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "schedule_callback_inbound",
+      "description": "Agenda un callback (devolución de llamada) en el calendario del cliente. Llama esta tool solo después de confirmar disponibilidad con check_callback_availability_inbound y de obtener la confirmación del paciente. ANTES de llamar esta tool, pide al paciente su correo electrónico — es obligatorio para esta tool aunque no se haya pedido antes en la llamada. El email se guarda en el contacto de GHL antes de crear la cita.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "startTime",
+          "endTime"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Nombre completo del paciente/cliente."
+          },
+          "email": {
+            "type": "string",
+            "description": "Correo electrónico del paciente, recolectado durante la llamada. OBLIGATORIO antes de agendar — si no lo tienes, pídelo conversacionalmente antes de llamar esta tool."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Número de teléfono del paciente (opcional, pero recomendado si está disponible en el contexto de la llamada)."
+          },
+          "contactId": {
+            "type": "string",
+            "description": "ID del contacto en GHL si está disponible (opcional)."
+          },
+          "startTime": {
+            "type": "string",
+            "description": "Fecha y hora de inicio EXACTA que el usuario solicitó para el callback, en formato ISO 8601 con la zona horaria del cliente. CRÍTICO: usa la hora EXACTA que mencionó el usuario — NO conviertas a UTC. Si dijo '10 AM' envía '10:00:00' en su timezone (ej: '2026-01-28T10:00:00-06:00'). NUNCA uses formato UTC (Z)."
+          },
+          "endTime": {
+            "type": "string",
+            "description": "Fecha y hora de fin del callback en formato ISO 8601 con la misma zona horaria que startTime. Calcula endTime = startTime + duración (típicamente 15 minutos para callbacks)."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notas adicionales sobre el callback (opcional)."
+          }
+        }
+      }
+    }
+  }
+]

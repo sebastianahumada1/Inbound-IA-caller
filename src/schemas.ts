@@ -222,6 +222,7 @@ export const ScheduleAppointmentArgsSchema = z.object({
   contactId: z.string().optional(),
   name: z.string().min(1),
   phone: z.string().optional(),
+  email: z.string().email().optional(),
   startTime: z.string().min(1),
   endTime: z.string().min(1),
   notes: z.string().optional().default(''),
@@ -240,6 +241,19 @@ export const DdpCheckContactArgsSchema = z.object({
 });
 
 export const DdpCreateContactArgsSchema = z.object({
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  phone: z.string().min(1),
+  email: z.string().email().optional(),
+});
+
+// Generic (multi-client) contact tools
+export const CheckContactArgsSchema = z.object({
+  phone: z.string().optional(),
+  query: z.string().optional(),
+});
+
+export const CreateContactArgsSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   phone: z.string().min(1),
@@ -282,6 +296,8 @@ export type LookupCallerArgs = z.infer<typeof LookupCallerArgsSchema>;
 export type SearchContactArgs = z.infer<typeof SearchContactArgsSchema>;
 export type DdpCheckContactArgs = z.infer<typeof DdpCheckContactArgsSchema>;
 export type DdpCreateContactArgs = z.infer<typeof DdpCreateContactArgsSchema>;
+export type CheckContactArgs = z.infer<typeof CheckContactArgsSchema>;
+export type CreateContactArgs = z.infer<typeof CreateContactArgsSchema>;
 export type DdpMarkTransferredArgs = z.infer<typeof DdpMarkTransferredArgsSchema>;
 export type DdpMarkTransferredSupportArgs = z.infer<typeof DdpMarkTransferredSupportArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;

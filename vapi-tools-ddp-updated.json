@@ -1,0 +1,50 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "ddp_check_contact",
+      "description": "Busca si un contacto ya existe en el CRM (GHL) usando su número de teléfono. Retorna found: true con los datos del contacto si existe, o found: false si no existe o si solo existe un registro vacío sin nombre (ghost contact). Llama esta tool primero antes de crear cualquier contacto nuevo.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "phone"
+        ],
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "Número de teléfono del llamante a buscar, incluyendo código de país (ej: +12125550000)."
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "ddp_create_contact",
+      "description": "Crea o actualiza un contacto en el CRM (GHL) usando el número de teléfono como clave. Úsala únicamente cuando ddp_check_contact haya retornado found: false. Si ya existe un contacto vacío con ese teléfono (ghost contact creado por el IVR), esta tool lo completará en vez de duplicarlo. NO pidas el email al llamante; solicita solo nombre y apellido.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "phone",
+          "firstName",
+          "lastName"
+        ],
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "Número de teléfono del contacto, incluyendo código de país (ej: +12125550000)."
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Nombre del contacto, como lo dijo el llamante."
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Apellido del contacto, como lo dijo el llamante."
+          }
+        }
+      }
+    }
+  }
+]

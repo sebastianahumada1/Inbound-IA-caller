@@ -1,0 +1,54 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "check_contact",
+      "description": "Searches if a contact exists in the CRM (GoHighLevel) for the current client. On inbound calls the caller's phone is auto-resolved from call metadata, so you can call this tool with no arguments. Optionally pass 'phone' or 'query' to search by a different value (e.g. when the caller gives a different number, email, or name). Returns found: true with contactId, firstName, lastName, email, phone and tags when a contact exists; returns found: false otherwise (ghost contacts with no name/email are also treated as not found). Tags are returned raw — interpret them according to your client's playbook.",
+      "parameters": {
+        "type": "object",
+        "required": [],
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "Phone number to search for, including country code (e.g. '+12125550000'). Optional — leave blank to use the inbound caller's phone automatically."
+          },
+          "query": {
+            "type": "string",
+            "description": "Free-text query to search the CRM by (name, email, or any contact field). Optional — only use when you need to look up a contact by something other than phone."
+          }
+        }
+      }
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_contact",
+      "description": "Creates or upserts a contact in the CRM (GoHighLevel) for the current client. Call this only after check_contact returned found: false. Phone is required; pass firstName, lastName, and email whenever the caller shares them. Returns the contactId, which you must use for any subsequent scheduling or tagging tool in the same call.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "phone"
+        ],
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "Contact phone number including country code (e.g. '+12125550000')."
+          },
+          "firstName": {
+            "type": "string",
+            "description": "Contact first name. Optional but recommended — collect from the caller if they share it."
+          },
+          "lastName": {
+            "type": "string",
+            "description": "Contact last name. Optional but recommended — collect from the caller if they share it."
+          },
+          "email": {
+            "type": "string",
+            "description": "Contact email address. Optional but recommended — collect from the caller if they share it."
+          }
+        }
+      }
+    }
+  }
+]

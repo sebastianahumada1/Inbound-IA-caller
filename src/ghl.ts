@@ -1282,6 +1282,70 @@ export class GHLConnector {
         };
       }
       
+      // If the AI collected an email at scheduling time, persist it on the
+      // existing contact ONLY when the contact has no email yet. Best-effort:
+      // booking proceeds even if the lookup or update fails.
+      if (args.email && contactIdToUse) {
+        try {
+          const lookupResp = await this.httpClient.get(
+            `https://services.leadconnectorhq.com/contacts/${contactIdToUse}`,
+            {
+              headers: {
+                'Authorization': `Bearer ${ghlApiKey}`,
+                'Content-Type': 'application/json',
+                'Version': '2021-07-28',
+              },
+            }
+          );
+
+          const existingContact = lookupResp.data?.contact || lookupResp.data;
+          const existingEmail = (existingContact?.email ?? '').trim();
+
+          if (!lookupResp.ok) {
+            Logger.warn('[CALENDAR] Contact lookup before email update failed; skipping update', {
+              id,
+              contactId: contactIdToUse,
+              status: lookupResp.status,
+            });
+          } else if (existingEmail) {
+            Logger.info('[CALENDAR] Contact already has an email; skipping update', {
+              id,
+              contactId: contactIdToUse,
+            });
+          } else {
+            Logger.info('[CALENDAR] Contact email empty — saving from scheduling args', {
+              id,
+              contactId: contactIdToUse,
+            });
+            const updateResp = await fetch(
+              `https://services.leadconnectorhq.com/contacts/${contactIdToUse}`,
+              {
+                method: 'PUT',
+                headers: {
+                  'Authorization': `Bearer ${ghlApiKey}`,
+                  'Content-Type': 'application/json',
+                  'Version': '2021-07-28',
+                },
+                body: JSON.stringify({ email: args.email }),
+              }
+            );
+            if (!updateResp.ok) {
+              Logger.warn('[CALENDAR] Email update returned non-OK; continuing with booking', {
+                id,
+                contactId: contactIdToUse,
+                status: updateResp.status,
+              });
+            }
+          }
+        } catch (err) {
+          Logger.warn('[CALENDAR] Email update flow failed; continuing with booking', {
+            id,
+            contactId: contactIdToUse,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }
+
       // Use contactId in payload (required by GHL)
       const payload: any = {
         calendarId,
