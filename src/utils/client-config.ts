@@ -144,6 +144,14 @@ export class ClientConfigManager {
         slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY',
       },
       {
+        name: 'Miami Valley Frontdesk',
+        assistantIdVar: 'MIAMI_VALLEY_FRONTDESK_ASSISTANT_ID',
+        apiKeyVar: 'MIAMI_VALLEY_FRONTDESK_GHL_API_KEY',
+        calendarIdVar: 'MIAMI_VALLEY_FRONTDESK_CALENDAR_ID',
+        locationIdVar: 'MIAMI_VALLEY_FRONTDESK_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY_FRONTDESK',
+      },
+      {
         name: 'Northeast',
         assistantIdVar: 'NORTHEAST_ASSISTANT_ID',
         apiKeyVar: 'NORTHEAST_GHL_API_KEY',
