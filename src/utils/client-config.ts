@@ -162,14 +162,6 @@ export class ClientConfigManager {
         slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY_FRONTDESK',
       },
       {
-        name: 'Northeast',
-        assistantIdVar: 'NORTHEAST_ASSISTANT_ID',
-        apiKeyVar: 'NORTHEAST_GHL_API_KEY',
-        calendarIdVar: 'NORTHEAST_CALENDAR_ID',
-        locationIdVar: 'NORTHEAST_LOCATION_ID',
-        slackChannelVar: 'SLACK_CHANNEL_ID_NORTHEAST',
-      },
-      {
         name: 'Restore Integrated',
         assistantIdVar: 'RESTORE_INTEGRATED_ASSISTANT_ID',
         apiKeyVar: 'RESTORE_INTEGRATED_GHL_API_KEY',
