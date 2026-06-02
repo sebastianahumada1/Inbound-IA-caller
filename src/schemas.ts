@@ -216,6 +216,9 @@ export const UpdateStageArgsSchema = z.object({
 export const CheckCalendarAvailabilityArgsSchema = z.object({
   dateTime: z.string().min(1),
   durationMinutes: z.number().optional().default(30),
+  // Program routing for multi-program frontdesk assistants (e.g. Miami Valley).
+  // Absent for single-program clients (defaults to the main calendar).
+  program_tag: z.enum(['NEUROPATHY', 'BACK_NECK']).optional(),
 });
 
 export const ScheduleAppointmentArgsSchema = z.object({
@@ -226,6 +229,7 @@ export const ScheduleAppointmentArgsSchema = z.object({
   startTime: z.string().min(1),
   endTime: z.string().min(1),
   notes: z.string().optional().default(''),
+  program_tag: z.enum(['NEUROPATHY', 'BACK_NECK']).optional(),
 });
 
 export const LookupCallerArgsSchema = z.object({

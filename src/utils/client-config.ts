@@ -12,9 +12,11 @@ export interface ClientConfig {
   assistantId: string;
   ghlApiKey: string;
   calendarId?: string;
+  backNeckCalendarId?: string;
   callbackCalendarId?: string;
   gabrielCalendarId?: string;
   guideWorkflowId?: string;
+  backNeckGuideWorkflowId?: string;
   locationId?: string;
   slackChannelId?: string;
 }
@@ -145,24 +147,19 @@ export class ClientConfigManager {
         slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY',
       },
       {
+        // Single frontdesk assistant handles BOTH programs. program_tag on the
+        // calendar/schedule tools routes to the neuropathy (main) or back-neck
+        // calendar; send_text_guide routes to the matching guide workflow.
         name: 'Miami Valley Frontdesk',
         assistantIdVar: 'MIAMI_VALLEY_FRONTDESK_ASSISTANT_ID',
         apiKeyVar: 'MIAMI_VALLEY_FRONTDESK_GHL_API_KEY',
         calendarIdVar: 'MIAMI_VALLEY_FRONTDESK_CALENDAR_ID',
+        calendarIdBackNeckVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_CALENDAR_ID',
         calendarIdCallbackVar: 'MIAMI_VALLEY_FRONTDESK_CALLBACK_CALENDAR_ID',
         guideWorkflowIdVar: 'MIAMI_VALLEY_FRONTDESK_NEURO_GUIDE_WF',
+        guideWorkflowIdBackNeckVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_GUIDE_WF',
         locationIdVar: 'MIAMI_VALLEY_FRONTDESK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY_FRONTDESK',
-      },
-      {
-        name: 'Miami Valley Frontdesk Back Neck',
-        assistantIdVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_ASSISTANT_ID',
-        apiKeyVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_GHL_API_KEY',
-        calendarIdVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_CALENDAR_ID',
-        calendarIdCallbackVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_CALLBACK_CALENDAR_ID',
-        guideWorkflowIdVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_GUIDE_WF',
-        locationIdVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_LOCATION_ID',
-        slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY_FRONTDESK_BACK_NECK',
       },
       {
         name: 'Northeast',
@@ -257,6 +254,14 @@ export class ClientConfigManager {
         config.calendarId = calendarId;
       }
 
+      // Add optional back-neck calendar ID if configured (program_tag routing)
+      if ('calendarIdBackNeckVar' in clientDef && clientDef.calendarIdBackNeckVar) {
+        const backNeckCalendarId = process.env[clientDef.calendarIdBackNeckVar];
+        if (backNeckCalendarId) {
+          config.backNeckCalendarId = backNeckCalendarId;
+        }
+      }
+
       // Add optional callback calendar ID if configured
       if ('calendarIdCallbackVar' in clientDef && clientDef.calendarIdCallbackVar) {
         const callbackCalendarId = process.env[clientDef.calendarIdCallbackVar];
@@ -273,11 +278,19 @@ export class ClientConfigManager {
         }
       }
 
-      // Add optional guide workflow ID if configured (send_text_guide trigger)
+      // Add optional guide workflow ID if configured (send_text_guide — neuropathy/default)
       if ('guideWorkflowIdVar' in clientDef && clientDef.guideWorkflowIdVar) {
         const guideWorkflowId = process.env[clientDef.guideWorkflowIdVar];
         if (guideWorkflowId) {
           config.guideWorkflowId = guideWorkflowId;
+        }
+      }
+
+      // Add optional back-neck guide workflow ID if configured (send_text_guide — back & neck)
+      if ('guideWorkflowIdBackNeckVar' in clientDef && clientDef.guideWorkflowIdBackNeckVar) {
+        const backNeckGuideWorkflowId = process.env[clientDef.guideWorkflowIdBackNeckVar];
+        if (backNeckGuideWorkflowId) {
+          config.backNeckGuideWorkflowId = backNeckGuideWorkflowId;
         }
       }
 
@@ -469,6 +482,14 @@ export class ClientConfigManager {
   }
 
   /**
+   * Get Back-Neck Calendar ID by Assistant ID (program_tag routing)
+   */
+  static getBackNeckCalendarId(assistantId: string): string | undefined {
+    const config = this.getConfigByAssistantId(assistantId);
+    return config?.backNeckCalendarId;
+  }
+
+  /**
    * Get Callback Calendar ID by Assistant ID
    */
   static getCallbackCalendarId(assistantId: string): string | undefined {
@@ -485,11 +506,19 @@ export class ClientConfigManager {
   }
 
   /**
-   * Get Guide Workflow ID by Assistant ID (send_text_guide trigger)
+   * Get Guide Workflow ID by Assistant ID (send_text_guide — neuropathy/default)
    */
   static getGuideWorkflowId(assistantId: string): string | undefined {
     const config = this.getConfigByAssistantId(assistantId);
     return config?.guideWorkflowId;
+  }
+
+  /**
+   * Get Back-Neck Guide Workflow ID by Assistant ID (send_text_guide — back & neck)
+   */
+  static getBackNeckGuideWorkflowId(assistantId: string): string | undefined {
+    const config = this.getConfigByAssistantId(assistantId);
+    return config?.backNeckGuideWorkflowId;
   }
 
   /**

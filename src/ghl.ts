@@ -144,7 +144,7 @@ export class GHLConnector {
    * - 'gabriel': DDP secondary calendar (collections under $40K)
    * - 'callback': callback/recall calendar
    */
-  private getCalendarId(calendarType: 'main' | 'gabriel' | 'callback' = 'main'): string | null {
+  private getCalendarId(calendarType: 'main' | 'gabriel' | 'callback' | 'backneck' = 'main'): string | null {
     if (!this.assistantId) {
       Logger.warn('[GHL_CONNECTOR] No assistantId set on connector');
       return null;
@@ -157,6 +157,9 @@ export class GHLConnector {
         break;
       case 'callback':
         calendarId = ClientConfigManager.getCallbackCalendarId(this.assistantId);
+        break;
+      case 'backneck':
+        calendarId = ClientConfigManager.getBackNeckCalendarId(this.assistantId);
         break;
       default:
         calendarId = ClientConfigManager.getCalendarId(this.assistantId);
@@ -531,7 +534,7 @@ export class GHLConnector {
     }
   }
 
-  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any, calendarType: 'main' | 'gabriel' | 'callback' = 'main'): Promise<ToolResult> {
+  async checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any, calendarType: 'main' | 'gabriel' | 'callback' | 'backneck' = 'main'): Promise<ToolResult> {
     try {
       Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args, calendarType });
 
@@ -807,7 +810,7 @@ export class GHLConnector {
     }
   }
 
-  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any, calendarType: 'main' | 'gabriel' | 'callback' = 'main'): Promise<ToolResult> {
+  async scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any, calendarType: 'main' | 'gabriel' | 'callback' | 'backneck' = 'main'): Promise<ToolResult> {
     try {
       Logger.info('[CALENDAR] Processing schedule_appointment', {
         id,

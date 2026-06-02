@@ -453,16 +453,20 @@ export class VapiWebhookHandler {
     }
   }
 
-  private async handleCheckCalendarAvailability(id: string, args: any, callId?: string, calendarType: 'main' | 'gabriel' | 'callback' = 'main'): Promise<ToolResult> {
+  private async handleCheckCalendarAvailability(id: string, args: any, callId?: string, calendarType: 'main' | 'gabriel' | 'callback' | 'backneck' = 'main'): Promise<ToolResult> {
     try {
       const validatedArgs = CheckCalendarAvailabilityArgsSchema.parse(args);
-      const result = await this.ghlConnector.checkCalendarAvailability(id, validatedArgs, callId, this.stateStorage, calendarType);
+      // For multi-program frontdesk assistants, program_tag routes the default
+      // ("main") calendar to the back-neck calendar. Gabriel/callback flows are
+      // unaffected, and single-program clients never send program_tag.
+      const effectiveType = calendarType === 'main' && validatedArgs.program_tag === 'BACK_NECK' ? 'backneck' : calendarType;
+      const result = await this.ghlConnector.checkCalendarAvailability(id, validatedArgs, callId, this.stateStorage, effectiveType);
 
       if (callId && result.ok) {
         const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
         await this.stateStorage.storeCallMetadata(callId, {
           ...existing,
-          lastCheckedCalendarType: calendarType,
+          lastCheckedCalendarType: effectiveType,
         });
       }
 
@@ -480,28 +484,32 @@ export class VapiWebhookHandler {
     }
   }
 
-  private async handleScheduleAppointment(id: string, args: any, ghlMetadata?: any, callId?: string, calendarType: 'main' | 'gabriel' | 'callback' = 'main'): Promise<ToolResult> {
+  private async handleScheduleAppointment(id: string, args: any, ghlMetadata?: any, callId?: string, calendarType: 'main' | 'gabriel' | 'callback' | 'backneck' = 'main'): Promise<ToolResult> {
     try {
       const validatedArgs = ScheduleAppointmentArgsSchema.parse(args);
+      // Mirror the program_tag routing applied in handleCheckCalendarAvailability
+      // so the mismatch guard and the booking target the same calendar.
+      const effectiveType = calendarType === 'main' && validatedArgs.program_tag === 'BACK_NECK' ? 'backneck' : calendarType;
 
       if (callId) {
         const metadata = await this.stateStorage.getCallMetadata(callId);
         const lastChecked = metadata?.lastCheckedCalendarType;
-        if (lastChecked && lastChecked !== calendarType) {
+        if (lastChecked && lastChecked !== effectiveType) {
           const expectedCheckTool =
-            calendarType === 'gabriel' ? 'check_gabriel_availability_inbound' :
-            calendarType === 'callback' ? 'check_callback_availability_inbound' :
+            effectiveType === 'gabriel' ? 'check_gabriel_availability_inbound' :
+            effectiveType === 'callback' ? 'check_callback_availability_inbound' :
+            effectiveType === 'backneck' ? 'check_calendar_availability (program_tag: BACK_NECK)' :
             'check_ddp_availability_inbound';
-          Logger.warn('[SCHEDULE] Calendar mismatch — refusing booking', { callId, lastChecked, attempted: calendarType });
+          Logger.warn('[SCHEDULE] Calendar mismatch — refusing booking', { callId, lastChecked, attempted: effectiveType });
           return {
             id,
             ok: false,
-            error: `Calendar mismatch: availability was last checked on the "${lastChecked}" calendar but you are trying to book on the "${calendarType}" calendar. Call ${expectedCheckTool} first to confirm the slot is open on the correct calendar, then retry this booking.`,
+            error: `Calendar mismatch: availability was last checked on the "${lastChecked}" calendar but you are trying to book on the "${effectiveType}" calendar. Call ${expectedCheckTool} first to confirm the slot is open on the correct calendar, then retry this booking.`,
           };
         }
       }
 
-      return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata, callId, this.stateStorage, calendarType);
+      return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata, callId, this.stateStorage, effectiveType);
     } catch (error) {
       if (error instanceof ZodError) {
         Logger.error('Invalid schedule_appointment arguments', { id, errors: error.issues });
@@ -1285,13 +1293,19 @@ export class VapiWebhookHandler {
         return { id, ok: false, error: 'GHL credentials not configured' };
       }
 
-      const workflowId = assistantId ? ClientConfigManager.getGuideWorkflowId(assistantId) : undefined;
+      // Route to the matching guide workflow. A multi-program frontdesk sends
+      // guide_type; single-program clients omit it and get the default guide.
+      const workflowId = assistantId
+        ? (validatedArgs.guide_type === 'BACK_NECK'
+            ? ClientConfigManager.getBackNeckGuideWorkflowId(assistantId)
+            : ClientConfigManager.getGuideWorkflowId(assistantId))
+        : undefined;
       if (!workflowId) {
-        Logger.error('[SEND_TEXT_GUIDE] Guide workflow not configured', { callId, assistantId });
+        Logger.error('[SEND_TEXT_GUIDE] Guide workflow not configured', { callId, assistantId, guideType: validatedArgs.guide_type });
         return { id, ok: false, error: 'GUIDE_WORKFLOW_NOT_CONFIGURED' };
       }
 
-      Logger.info('[SEND_TEXT_GUIDE] Triggering guide workflow', { callId, contactId, workflowId });
+      Logger.info('[SEND_TEXT_GUIDE] Triggering guide workflow', { callId, contactId, workflowId, guideType: validatedArgs.guide_type });
 
       const resp = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/workflow/${workflowId}`, {
         method: 'POST',
