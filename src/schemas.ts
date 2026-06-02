@@ -268,6 +268,11 @@ export const DdpMarkTransferredSupportArgsSchema = z.object({
   contactId: z.string().optional(),
 });
 
+export const SendTextGuideArgsSchema = z.object({
+  contactId: z.string().optional(),
+  guide_type: z.string().optional(), // informational; program is resolved by assistant
+});
+
 // Response schemas
 export const ToolResultSchema = z.object({
   id: z.string(),
@@ -300,6 +305,7 @@ export type CheckContactArgs = z.infer<typeof CheckContactArgsSchema>;
 export type CreateContactArgs = z.infer<typeof CreateContactArgsSchema>;
 export type DdpMarkTransferredArgs = z.infer<typeof DdpMarkTransferredArgsSchema>;
 export type DdpMarkTransferredSupportArgs = z.infer<typeof DdpMarkTransferredSupportArgsSchema>;
+export type SendTextGuideArgs = z.infer<typeof SendTextGuideArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;
 

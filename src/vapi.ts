@@ -23,6 +23,7 @@ import {
   DdpCreateContactArgsSchema,
   DdpMarkTransferredArgsSchema,
   DdpMarkTransferredSupportArgsSchema,
+  SendTextGuideArgsSchema,
   CheckContactArgsSchema,
   CreateContactArgsSchema,
   ToolResult,
@@ -344,6 +345,9 @@ export class VapiWebhookHandler {
 
         case 'ddp_mark_transferred_support':
           return await this.handleDdpMarkTransferredSupport(id, args, callId, assistantId);
+
+        case 'send_text_guide':
+          return await this.handleSendTextGuide(id, args, callId, assistantId);
 
         default:
           Logger.warn('Unknown tool name', { id, name });
@@ -1256,6 +1260,68 @@ export class VapiWebhookHandler {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       Logger.error('[DDP_MARK_TRANSFERRED_SUPPORT] Error', { id, callId, error: msg });
       return { id, ok: false, error: `Mark transferred support failed: ${msg}` };
+    }
+  }
+
+  // ── Send text guide (triggers a GHL workflow that texts the guide) ──
+  private async handleSendTextGuide(id: string, args: any, callId?: string, assistantId?: string): Promise<ToolResult> {
+    try {
+      const validatedArgs = SendTextGuideArgsSchema.parse(args);
+
+      let contactId = validatedArgs.contactId;
+      if (!contactId && callId) {
+        const metadata = await this.stateStorage.getCallMetadata(callId);
+        contactId = metadata?.contactId;
+      }
+
+      if (!contactId) {
+        Logger.error('[SEND_TEXT_GUIDE] Missing contactId', { callId });
+        return { id, ok: false, error: 'contactId is required (none provided and none in call metadata).' };
+      }
+
+      const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+      if (!apiKey) {
+        Logger.error('[SEND_TEXT_GUIDE] Missing credentials', { hasApiKey: !!apiKey });
+        return { id, ok: false, error: 'GHL credentials not configured' };
+      }
+
+      const workflowId = assistantId ? ClientConfigManager.getGuideWorkflowId(assistantId) : undefined;
+      if (!workflowId) {
+        Logger.error('[SEND_TEXT_GUIDE] Guide workflow not configured', { callId, assistantId });
+        return { id, ok: false, error: 'GUIDE_WORKFLOW_NOT_CONFIGURED' };
+      }
+
+      Logger.info('[SEND_TEXT_GUIDE] Triggering guide workflow', { callId, contactId, workflowId });
+
+      const resp = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/workflow/${workflowId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Version': '2021-07-28',
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await resp.json() as any;
+
+      if (!resp.ok) {
+        Logger.error('[SEND_TEXT_GUIDE] GHL API error', { status: resp.status, data });
+        return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+      }
+
+      Logger.info('[SEND_TEXT_GUIDE] Guide workflow triggered', { callId, contactId, workflowId });
+
+      return {
+        id, ok: true,
+        data: { sent: true, contactId },
+      };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+      }
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      Logger.error('[SEND_TEXT_GUIDE] Error', { id, callId, error: msg });
+      return { id, ok: false, error: `Send text guide failed: ${msg}` };
     }
   }
 

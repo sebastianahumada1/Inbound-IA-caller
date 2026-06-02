@@ -14,6 +14,7 @@ export interface ClientConfig {
   calendarId?: string;
   callbackCalendarId?: string;
   gabrielCalendarId?: string;
+  guideWorkflowId?: string;
   locationId?: string;
   slackChannelId?: string;
 }
@@ -148,8 +149,20 @@ export class ClientConfigManager {
         assistantIdVar: 'MIAMI_VALLEY_FRONTDESK_ASSISTANT_ID',
         apiKeyVar: 'MIAMI_VALLEY_FRONTDESK_GHL_API_KEY',
         calendarIdVar: 'MIAMI_VALLEY_FRONTDESK_CALENDAR_ID',
+        calendarIdCallbackVar: 'MIAMI_VALLEY_FRONTDESK_CALLBACK_CALENDAR_ID',
+        guideWorkflowIdVar: 'MIAMI_VALLEY_FRONTDESK_NEURO_GUIDE_WF',
         locationIdVar: 'MIAMI_VALLEY_FRONTDESK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY_FRONTDESK',
+      },
+      {
+        name: 'Miami Valley Frontdesk Back Neck',
+        assistantIdVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_ASSISTANT_ID',
+        apiKeyVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_GHL_API_KEY',
+        calendarIdVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_CALENDAR_ID',
+        calendarIdCallbackVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_CALLBACK_CALENDAR_ID',
+        guideWorkflowIdVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_GUIDE_WF',
+        locationIdVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_LOCATION_ID',
+        slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY_FRONTDESK_BACK_NECK',
       },
       {
         name: 'Northeast',
@@ -257,6 +270,14 @@ export class ClientConfigManager {
         const gabrielCalendarId = process.env[clientDef.calendarIdGabrielVar];
         if (gabrielCalendarId) {
           config.gabrielCalendarId = gabrielCalendarId;
+        }
+      }
+
+      // Add optional guide workflow ID if configured (send_text_guide trigger)
+      if ('guideWorkflowIdVar' in clientDef && clientDef.guideWorkflowIdVar) {
+        const guideWorkflowId = process.env[clientDef.guideWorkflowIdVar];
+        if (guideWorkflowId) {
+          config.guideWorkflowId = guideWorkflowId;
         }
       }
 
@@ -461,6 +482,14 @@ export class ClientConfigManager {
   static getGabrielCalendarId(assistantId: string): string | undefined {
     const config = this.getConfigByAssistantId(assistantId);
     return config?.gabrielCalendarId;
+  }
+
+  /**
+   * Get Guide Workflow ID by Assistant ID (send_text_guide trigger)
+   */
+  static getGuideWorkflowId(assistantId: string): string | undefined {
+    const config = this.getConfigByAssistantId(assistantId);
+    return config?.guideWorkflowId;
   }
 
   /**
