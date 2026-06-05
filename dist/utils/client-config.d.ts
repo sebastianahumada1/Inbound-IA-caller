@@ -6,7 +6,11 @@ export interface ClientConfig {
     assistantId: string;
     ghlApiKey: string;
     calendarId?: string;
+    backNeckCalendarId?: string;
     callbackCalendarId?: string;
+    gabrielCalendarId?: string;
+    guideWorkflowId?: string;
+    backNeckGuideWorkflowId?: string;
     locationId?: string;
     slackChannelId?: string;
 }
@@ -37,9 +41,25 @@ export declare class ClientConfigManager {
      */
     static getCalendarId(assistantId: string): string | undefined;
     /**
+     * Get Back-Neck Calendar ID by Assistant ID (program_tag routing)
+     */
+    static getBackNeckCalendarId(assistantId: string): string | undefined;
+    /**
      * Get Callback Calendar ID by Assistant ID
      */
     static getCallbackCalendarId(assistantId: string): string | undefined;
+    /**
+     * Get Gabriel Calendar ID by Assistant ID (DDP routing for <$40K collections)
+     */
+    static getGabrielCalendarId(assistantId: string): string | undefined;
+    /**
+     * Get Guide Workflow ID by Assistant ID (send_text_guide — neuropathy/default)
+     */
+    static getGuideWorkflowId(assistantId: string): string | undefined;
+    /**
+     * Get Back-Neck Guide Workflow ID by Assistant ID (send_text_guide — back & neck)
+     */
+    static getBackNeckGuideWorkflowId(assistantId: string): string | undefined;
     /**
      * Get Location ID by Assistant ID
      */

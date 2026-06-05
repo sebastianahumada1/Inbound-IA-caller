@@ -87,30 +87,6 @@ export class ClientConfigManager {
                 slackChannelVar: 'SLACK_CHANNEL_ID_NUWAVE',
             },
             {
-                name: 'ReliefSource',
-                assistantIdVar: 'RELIEFSOURCE_ASSISTANT_ID',
-                apiKeyVar: 'RELIEFSOURCE_GHL_API_KEY',
-                calendarIdVar: 'RELIEFSOURCE_CALENDAR_ID',
-                locationIdVar: 'RELIEFSOURCE_LOCATION_ID',
-                slackChannelVar: 'SLACK_CHANNEL_ID_RELIEFSOURCE',
-            },
-            {
-                name: 'Belden Village',
-                assistantIdVar: 'BELDEN_VILLAGE_ASSISTANT_ID',
-                apiKeyVar: 'BELDEN_VILLAGE_GHL_API_KEY',
-                calendarIdVar: 'BELDEN_VILLAGE_CALENDAR_ID',
-                locationIdVar: 'BELDEN_VILLAGE_LOCATION_ID',
-                slackChannelVar: 'SLACK_CHANNEL_ID_BELDEN_VILLAGE',
-            },
-            {
-                name: 'James Health Center',
-                assistantIdVar: 'JAMES_HEALTH_CENTER_ASSISTANT_ID',
-                apiKeyVar: 'JAMES_HEALTH_CENTER_GHL_API_KEY',
-                calendarIdVar: 'JAMES_HEALTH_CENTER_CALENDAR_ID',
-                locationIdVar: 'JAMES_HEALTH_CENTER_LOCATION_ID',
-                slackChannelVar: 'SLACK_CHANNEL_ID_JAMES_HEALTH_CENTER',
-            },
-            {
                 name: 'Amplify Life Baldwin',
                 assistantIdVar: 'AMPLIFY_LIFE_BALDWIN_ASSISTANT_ID',
                 apiKeyVar: 'AMPLIFY_LIFE_BALDWIN_GHL_API_KEY',
@@ -127,20 +103,19 @@ export class ClientConfigManager {
                 slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY',
             },
             {
-                name: 'Northeast',
-                assistantIdVar: 'NORTHEAST_ASSISTANT_ID',
-                apiKeyVar: 'NORTHEAST_GHL_API_KEY',
-                calendarIdVar: 'NORTHEAST_CALENDAR_ID',
-                locationIdVar: 'NORTHEAST_LOCATION_ID',
-                slackChannelVar: 'SLACK_CHANNEL_ID_NORTHEAST',
-            },
-            {
-                name: 'Restore Integrated',
-                assistantIdVar: 'RESTORE_INTEGRATED_ASSISTANT_ID',
-                apiKeyVar: 'RESTORE_INTEGRATED_GHL_API_KEY',
-                calendarIdVar: 'RESTORE_INTEGRATED_CALENDAR_ID',
-                locationIdVar: 'RESTORE_INTEGRATED_LOCATION_ID',
-                slackChannelVar: 'SLACK_CHANNEL_ID_RESTORE_INTEGRATED',
+                // Single frontdesk assistant handles BOTH programs. program_tag on the
+                // calendar/schedule tools routes to the neuropathy (main) or back-neck
+                // calendar; send_text_guide routes to the matching guide workflow.
+                name: 'Miami Valley Frontdesk',
+                assistantIdVar: 'MIAMI_VALLEY_FRONTDESK_ASSISTANT_ID',
+                apiKeyVar: 'MIAMI_VALLEY_FRONTDESK_GHL_API_KEY',
+                calendarIdVar: 'MIAMI_VALLEY_FRONTDESK_CALENDAR_ID',
+                calendarIdBackNeckVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_CALENDAR_ID',
+                calendarIdCallbackVar: 'MIAMI_VALLEY_FRONTDESK_CALLBACK_CALENDAR_ID',
+                guideWorkflowIdVar: 'MIAMI_VALLEY_FRONTDESK_NEURO_GUIDE_WF',
+                guideWorkflowIdBackNeckVar: 'MIAMI_VALLEY_FRONTDESK_BACK_NECK_GUIDE_WF',
+                locationIdVar: 'MIAMI_VALLEY_FRONTDESK_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY_FRONTDESK',
             },
             {
                 name: 'Amplify Life Dallas',
@@ -150,6 +125,40 @@ export class ClientConfigManager {
                 calendarIdCallbackVar: 'AMPLIFY_LIFE_DALLAS_CALLBACK_CALENDAR_ID',
                 locationIdVar: 'AMPLIFY_LIFE_DALLAS_LOCATION_ID',
                 slackChannelVar: 'SLACK_CHANNEL_ID_AMPLIFY_LIFE_DALLAS',
+            },
+            {
+                name: 'Chiromedix',
+                assistantIdVar: 'CHIROMEDIX_ASSISTANT_ID',
+                apiKeyVar: 'CHIROMEDIX_GHL_API_KEY',
+                calendarIdVar: 'CHIROMEDIX_CALENDAR_ID',
+                locationIdVar: 'CHIROMEDIX_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_CHIROMEDIX',
+            },
+            {
+                name: 'Florida Neuropathy & Knee Pain Center',
+                assistantIdVar: 'FLORIDA_NEUROPATHY_ASSISTANT_ID',
+                apiKeyVar: 'FLORIDA_NEUROPATHY_GHL_API_KEY',
+                calendarIdVar: 'FLORIDA_NEUROPATHY_CALENDAR_ID',
+                locationIdVar: 'FLORIDA_NEUROPATHY_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_FLORIDA_NEUROPATHY',
+            },
+            {
+                name: 'Performance Sport and Spine Back',
+                assistantIdVar: 'PERFORMANCE_SPORT_SPINE_BACK_ASSISTANT_ID',
+                apiKeyVar: 'PERFORMANCE_SPORT_SPINE_BACK_GHL_API_KEY',
+                calendarIdVar: 'PERFORMANCE_SPORT_SPINE_BACK_CALENDAR_ID',
+                locationIdVar: 'PERFORMANCE_SPORT_SPINE_BACK_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_PERFORMANCE_SPORT_SPINE_BACK',
+            },
+            {
+                name: 'DDP',
+                assistantIdVar: 'DDP_ASSISTANT_ID',
+                apiKeyVar: 'DDP_GHL_API_KEY',
+                calendarIdVar: 'DDP_CALENDAR_ID',
+                calendarIdCallbackVar: 'DDP_CALLBACK_CALENDAR_ID',
+                calendarIdGabrielVar: 'DDP_GABRIEL_CALENDAR_ID',
+                locationIdVar: 'DDP_LOCATION_ID',
+                slackChannelVar: 'SLACK_CHANNEL_ID_DDP',
             },
         ];
         const missingConfigs = [];
@@ -179,11 +188,39 @@ export class ClientConfigManager {
             if (calendarId) {
                 config.calendarId = calendarId;
             }
+            // Add optional back-neck calendar ID if configured (program_tag routing)
+            if ('calendarIdBackNeckVar' in clientDef && clientDef.calendarIdBackNeckVar) {
+                const backNeckCalendarId = process.env[clientDef.calendarIdBackNeckVar];
+                if (backNeckCalendarId) {
+                    config.backNeckCalendarId = backNeckCalendarId;
+                }
+            }
             // Add optional callback calendar ID if configured
             if ('calendarIdCallbackVar' in clientDef && clientDef.calendarIdCallbackVar) {
                 const callbackCalendarId = process.env[clientDef.calendarIdCallbackVar];
                 if (callbackCalendarId) {
                     config.callbackCalendarId = callbackCalendarId;
+                }
+            }
+            // Add optional Gabriel calendar ID if configured (DDP routing for <$40K collections)
+            if ('calendarIdGabrielVar' in clientDef && clientDef.calendarIdGabrielVar) {
+                const gabrielCalendarId = process.env[clientDef.calendarIdGabrielVar];
+                if (gabrielCalendarId) {
+                    config.gabrielCalendarId = gabrielCalendarId;
+                }
+            }
+            // Add optional guide workflow ID if configured (send_text_guide — neuropathy/default)
+            if ('guideWorkflowIdVar' in clientDef && clientDef.guideWorkflowIdVar) {
+                const guideWorkflowId = process.env[clientDef.guideWorkflowIdVar];
+                if (guideWorkflowId) {
+                    config.guideWorkflowId = guideWorkflowId;
+                }
+            }
+            // Add optional back-neck guide workflow ID if configured (send_text_guide — back & neck)
+            if ('guideWorkflowIdBackNeckVar' in clientDef && clientDef.guideWorkflowIdBackNeckVar) {
+                const backNeckGuideWorkflowId = process.env[clientDef.guideWorkflowIdBackNeckVar];
+                if (backNeckGuideWorkflowId) {
+                    config.backNeckGuideWorkflowId = backNeckGuideWorkflowId;
                 }
             }
             // Add optional location ID if configured
@@ -276,6 +313,35 @@ export class ClientConfigManager {
                 });
             }
         }
+        // Register Miami Valley Back Inbound as alias of Miami Valley
+        const miamiValleyAssistantId = process.env['MIAMI_VALLEY_ASSISTANT_ID'];
+        const miamiValleyBackInboundAssistantId = process.env['MIAMI_VALLEY_BACK_INBOUND_ASSISTANT_ID'];
+        if (miamiValleyAssistantId && miamiValleyBackInboundAssistantId) {
+            const miamiValleyConfig = this.configs.get(miamiValleyAssistantId);
+            if (miamiValleyConfig && !this.configs.has(miamiValleyBackInboundAssistantId)) {
+                const miamiValleyBackInboundConfig = {
+                    name: 'Miami Valley Back Inbound',
+                    assistantId: miamiValleyBackInboundAssistantId,
+                    ghlApiKey: miamiValleyConfig.ghlApiKey,
+                };
+                if (miamiValleyConfig.calendarId)
+                    miamiValleyBackInboundConfig.calendarId = miamiValleyConfig.calendarId;
+                if (miamiValleyConfig.locationId)
+                    miamiValleyBackInboundConfig.locationId = miamiValleyConfig.locationId;
+                if (miamiValleyConfig.slackChannelId)
+                    miamiValleyBackInboundConfig.slackChannelId = miamiValleyConfig.slackChannelId;
+                this.configs.set(miamiValleyBackInboundAssistantId, miamiValleyBackInboundConfig);
+                configuredClients.push('Miami Valley Back Inbound (alias)');
+                Logger.info('[CLIENT_CONFIG] Registered alias: Miami Valley Back Inbound -> Miami Valley', {
+                    aliasAssistantId: miamiValleyBackInboundAssistantId.substring(0, 8) + '...',
+                    parentAssistantId: miamiValleyAssistantId.substring(0, 8) + '...',
+                    hasGhlApiKey: !!miamiValleyBackInboundConfig.ghlApiKey,
+                    hasCalendarId: !!miamiValleyBackInboundConfig.calendarId,
+                    hasLocationId: !!miamiValleyBackInboundConfig.locationId,
+                    hasSlackChannelId: !!miamiValleyBackInboundConfig.slackChannelId,
+                });
+            }
+        }
         // Log initialization summary
         if (this.configs.size === 0) {
             Logger.error('[CLIENT_CONFIG] No client configurations loaded! Check environment variables.', {
@@ -330,11 +396,39 @@ export class ClientConfigManager {
         return config?.calendarId;
     }
     /**
+     * Get Back-Neck Calendar ID by Assistant ID (program_tag routing)
+     */
+    static getBackNeckCalendarId(assistantId) {
+        const config = this.getConfigByAssistantId(assistantId);
+        return config?.backNeckCalendarId;
+    }
+    /**
      * Get Callback Calendar ID by Assistant ID
      */
     static getCallbackCalendarId(assistantId) {
         const config = this.getConfigByAssistantId(assistantId);
         return config?.callbackCalendarId;
+    }
+    /**
+     * Get Gabriel Calendar ID by Assistant ID (DDP routing for <$40K collections)
+     */
+    static getGabrielCalendarId(assistantId) {
+        const config = this.getConfigByAssistantId(assistantId);
+        return config?.gabrielCalendarId;
+    }
+    /**
+     * Get Guide Workflow ID by Assistant ID (send_text_guide — neuropathy/default)
+     */
+    static getGuideWorkflowId(assistantId) {
+        const config = this.getConfigByAssistantId(assistantId);
+        return config?.guideWorkflowId;
+    }
+    /**
+     * Get Back-Neck Guide Workflow ID by Assistant ID (send_text_guide — back & neck)
+     */
+    static getBackNeckGuideWorkflowId(assistantId) {
+        const config = this.getConfigByAssistantId(assistantId);
+        return config?.backNeckGuideWorkflowId;
     }
     /**
      * Get Location ID by Assistant ID

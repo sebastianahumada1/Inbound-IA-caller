@@ -77,6 +77,7 @@ export class SlackService {
             const { ClientConfigManager } = await import('./client-config.js');
             // Get client name from assistant ID
             const clientName = assistantId ? ClientConfigManager.getClientName(assistantId) : 'Unknown Client';
+            const displayName = clientName.includes('Inbound') ? clientName : `${clientName} Inbound`;
             // DEBUG: Log all available data structures
             Logger.info('[SLACK_SERVICE] DEBUG - Available data structures', {
                 callId,
@@ -191,7 +192,7 @@ export class SlackService {
             const fullName = [leadFirstName, leadLastName].filter(n => n && n !== 'N/A').join(' ') || 'N/A';
             // Build the message with exact format requested
             let message = `<!channel> New Call Recording & Report Just Dropped\n\n`;
-            message += `*Practice Name:* ${clientName}\n`;
+            message += `*Practice Name:* ${displayName}\n`;
             message += `*Name:* ${fullName}\n`;
             message += `*Email:* ${leadEmail}\n`;
             message += `*Phone:* ${leadPhone}\n`;
@@ -201,9 +202,18 @@ export class SlackService {
             }
             message += `*Date:* ${formattedDate}\n`;
             message += `*Call recording:* ${recordingUrl}`;
-            // Send the message
+            // Use client-specific channel if configured, otherwise fall back to default
+            const clientChannelId = assistantId
+                ? ClientConfigManager.getSlackChannelId(assistantId) || this.defaultChannelId
+                : this.defaultChannelId;
+            Logger.info('[SLACK_SERVICE] Resolved Slack channel', {
+                callId,
+                clientName,
+                channelId: clientChannelId,
+                isClientSpecific: clientChannelId !== this.defaultChannelId,
+            });
             await this.sendMessage({
-                channelId: this.defaultChannelId,
+                channelId: clientChannelId,
                 text: message,
             });
             Logger.info('[SLACK_SERVICE] Recording link sent successfully to Slack', {

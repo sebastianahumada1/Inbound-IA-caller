@@ -5,7 +5,7 @@ import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
 import { ClientConfigManager } from './utils/client-config.js';
-import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, LookupCallerArgsSchema, SearchContactArgsSchema, } from './schemas.js';
+import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, LookupCallerArgsSchema, SearchContactArgsSchema, DdpCheckContactArgsSchema, DdpCreateContactArgsSchema, DdpMarkTransferredArgsSchema, DdpMarkTransferredSupportArgsSchema, SendTextGuideArgsSchema, CheckContactArgsSchema, CreateContactArgsSchema, } from './schemas.js';
 import { hotProspectorSearchByPhone } from './lib/hotProspector.js';
 export class VapiWebhookHandler {
     ghlConnector;
@@ -232,16 +232,41 @@ export class VapiWebhookHandler {
                     return await this.handleUpdateStage(id, args);
                 case 'check_calendar_availability':
                 case 'check_calendar_availability_inbound':
+                case 'check_ddp_availability_inbound':
                     return await this.handleCheckCalendarAvailability(id, args, callId);
+                case 'check_gabriel_availability_inbound':
+                    return await this.handleCheckCalendarAvailability(id, args, callId, 'gabriel');
+                case 'check_callback_availability_inbound':
+                    return await this.handleCheckCalendarAvailability(id, args, callId, 'callback');
                 case 'schedule_appointment':
                 case 'schedule_appointment_inbound':
+                case 'schedule_ddp_inbound':
                     return await this.handleScheduleAppointment(id, args, ghlMetadata, callId);
+                case 'schedule_gabriel':
+                case 'schedule_gabriel_inbound':
+                    return await this.handleScheduleAppointment(id, args, ghlMetadata, callId, 'gabriel');
+                case 'schedule_callback_inbound':
+                    return await this.handleScheduleAppointment(id, args, ghlMetadata, callId, 'callback');
                 case 'lookup_caller':
                     return await this.handleLookupCaller(id, args, callId, customerPhone);
                 case 'search_contact':
                 case 'premier_inbound_contactid':
                 case 'inbound_contactid':
                     return await this.handleSearchContact(id, args, callId, assistantId);
+                case 'ddp_check_contact':
+                    return await this.handleDdpCheckContact(id, args, callId, assistantId, customerPhone);
+                case 'ddp_create_contact':
+                    return await this.handleDdpCreateContact(id, args, callId, assistantId);
+                case 'check_contact':
+                    return await this.handleCheckContact(id, args, callId, assistantId, customerPhone);
+                case 'create_contact':
+                    return await this.handleCreateContact(id, args, callId, assistantId);
+                case 'ddp_mark_transferred':
+                    return await this.handleDdpMarkTransferred(id, args, callId, assistantId);
+                case 'ddp_mark_transferred_support':
+                    return await this.handleDdpMarkTransferredSupport(id, args, callId, assistantId);
+                case 'send_text_guide':
+                    return await this.handleSendTextGuide(id, args, callId, assistantId);
                 default:
                     Logger.warn('Unknown tool name', { id, name });
                     return {
@@ -346,10 +371,22 @@ export class VapiWebhookHandler {
             throw error;
         }
     }
-    async handleCheckCalendarAvailability(id, args, callId) {
+    async handleCheckCalendarAvailability(id, args, callId, calendarType = 'main') {
         try {
             const validatedArgs = CheckCalendarAvailabilityArgsSchema.parse(args);
-            return await this.ghlConnector.checkCalendarAvailability(id, validatedArgs, callId, this.stateStorage);
+            // For multi-program frontdesk assistants, program_tag routes the default
+            // ("main") calendar to the back-neck calendar. Gabriel/callback flows are
+            // unaffected, and single-program clients never send program_tag.
+            const effectiveType = calendarType === 'main' && validatedArgs.program_tag === 'BACK_NECK' ? 'backneck' : calendarType;
+            const result = await this.ghlConnector.checkCalendarAvailability(id, validatedArgs, callId, this.stateStorage, effectiveType);
+            if (callId && result.ok) {
+                const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+                await this.stateStorage.storeCallMetadata(callId, {
+                    ...existing,
+                    lastCheckedCalendarType: effectiveType,
+                });
+            }
+            return result;
         }
         catch (error) {
             if (error instanceof ZodError) {
@@ -363,10 +400,29 @@ export class VapiWebhookHandler {
             throw error;
         }
     }
-    async handleScheduleAppointment(id, args, ghlMetadata, callId) {
+    async handleScheduleAppointment(id, args, ghlMetadata, callId, calendarType = 'main') {
         try {
             const validatedArgs = ScheduleAppointmentArgsSchema.parse(args);
-            return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata, callId, this.stateStorage);
+            // Mirror the program_tag routing applied in handleCheckCalendarAvailability
+            // so the mismatch guard and the booking target the same calendar.
+            const effectiveType = calendarType === 'main' && validatedArgs.program_tag === 'BACK_NECK' ? 'backneck' : calendarType;
+            if (callId) {
+                const metadata = await this.stateStorage.getCallMetadata(callId);
+                const lastChecked = metadata?.lastCheckedCalendarType;
+                if (lastChecked && lastChecked !== effectiveType) {
+                    const expectedCheckTool = effectiveType === 'gabriel' ? 'check_gabriel_availability_inbound' :
+                        effectiveType === 'callback' ? 'check_callback_availability_inbound' :
+                            effectiveType === 'backneck' ? 'check_calendar_availability (program_tag: BACK_NECK)' :
+                                'check_ddp_availability_inbound';
+                    Logger.warn('[SCHEDULE] Calendar mismatch — refusing booking', { callId, lastChecked, attempted: effectiveType });
+                    return {
+                        id,
+                        ok: false,
+                        error: `Calendar mismatch: availability was last checked on the "${lastChecked}" calendar but you are trying to book on the "${effectiveType}" calendar. Call ${expectedCheckTool} first to confirm the slot is open on the correct calendar, then retry this booking.`,
+                    };
+                }
+            }
+            return await this.ghlConnector.scheduleAppointment(id, validatedArgs, ghlMetadata, callId, this.stateStorage, effectiveType);
         }
         catch (error) {
             if (error instanceof ZodError) {
@@ -634,6 +690,461 @@ export class VapiWebhookHandler {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
             Logger.error('[SEARCH_CONTACT] Error during search', { id, callId, error: errorMessage });
             return { id, ok: false, error: `Search failed: ${errorMessage}` };
+        }
+    }
+    // ── DDP: Check if contact exists ───────────────────────────────────
+    async handleDdpCheckContact(id, args, callId, assistantId, customerPhone) {
+        try {
+            const validatedArgs = DdpCheckContactArgsSchema.parse(args);
+            const phone = customerPhone || validatedArgs.phone;
+            const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+            const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId)) || process.env.GHL_LOCATION_ID;
+            if (!apiKey || !locationId) {
+                Logger.error('[DDP_CHECK_CONTACT] Missing credentials', { hasApiKey: !!apiKey, hasLocationId: !!locationId });
+                return { id, ok: false, error: 'DDP GHL credentials not configured' };
+            }
+            Logger.info('[DDP_CHECK_CONTACT] Searching contact by phone', { callId, phone });
+            const url = `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${encodeURIComponent(phone)}`;
+            const resp = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${apiKey}`, 'Version': '2021-07-28' },
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                Logger.error('[DDP_CHECK_CONTACT] GHL API error', { status: resp.status, data });
+                return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+            }
+            const contact = data.contacts?.[0];
+            if (!contact) {
+                Logger.info('[DDP_CHECK_CONTACT] Contact not found', { callId, phone });
+                return {
+                    id, ok: true,
+                    data: { found: false, phone, message: 'No contact found for this phone number. Ask the caller for first name and last name before calling ddp_create_contact.' },
+                };
+            }
+            const firstName = (contact.firstName ?? '').trim();
+            const lastName = (contact.lastName ?? '').trim();
+            const email = (contact.email ?? '').trim();
+            const tags = Array.isArray(contact.tags) ? contact.tags : [];
+            const normalizedTags = tags.filter((t) => typeof t === 'string').map(t => t.toLowerCase());
+            const wasTransferred = normalizedTags.includes('call_transferred');
+            const wasTransferredToSupport = normalizedTags.includes('support_transferred');
+            const isMember = normalizedTags.includes('ddp member active list');
+            const isGhostContact = !firstName && !lastName && !email;
+            if (isGhostContact) {
+                Logger.info('[DDP_CHECK_CONTACT] Ghost contact detected (empty name/email) — treating as not found', {
+                    callId, contactId: contact.id, phone,
+                });
+                return {
+                    id, ok: true,
+                    data: {
+                        found: false,
+                        phone,
+                        message: 'No usable contact found for this phone number. Ask the caller for first name and last name before calling ddp_create_contact.',
+                    },
+                };
+            }
+            Logger.info('[DDP_CHECK_CONTACT] Contact found', { callId, contactId: contact.id });
+            if (callId) {
+                const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+                await this.stateStorage.storeCallMetadata(callId, {
+                    ...existing,
+                    contactId: contact.id,
+                    firstName: existing.firstName || firstName,
+                    lastName: existing.lastName || lastName,
+                    email: existing.email || email,
+                    phone: existing.phone || contact.phone || '',
+                });
+            }
+            return {
+                id, ok: true,
+                data: {
+                    found: true,
+                    contactId: contact.id,
+                    firstName,
+                    lastName,
+                    email,
+                    phone: contact.phone ?? '',
+                    tags,
+                    wasTransferred,
+                    wasTransferredToSupport,
+                    isMember,
+                    ...(isMember ? {
+                        message: 'This caller is an existing DDP member. Skip discovery, qualification, persona match, and value hook. Greet them by name, ask what they need help with, then call ddp_mark_transferred_support followed by transfer_call_tool_ddp_support.',
+                    } : wasTransferred ? {
+                        message: 'This caller was previously transferred to a live agent who did not answer. Do not run the full discovery script — offer to book a callback using check_callback_availability_inbound and schedule_callback_inbound.',
+                    } : {}),
+                },
+            };
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+            }
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[DDP_CHECK_CONTACT] Error', { id, callId, error: msg });
+            return { id, ok: false, error: `Check contact failed: ${msg}` };
+        }
+    }
+    // ── DDP: Create contact ────────────────────────────────────────────
+    async handleDdpCreateContact(id, args, callId, assistantId) {
+        try {
+            const validatedArgs = DdpCreateContactArgsSchema.parse(args);
+            const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+            const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId)) || process.env.GHL_LOCATION_ID;
+            if (!apiKey || !locationId) {
+                Logger.error('[DDP_CREATE_CONTACT] Missing credentials', { hasApiKey: !!apiKey, hasLocationId: !!locationId });
+                return { id, ok: false, error: 'DDP GHL credentials not configured' };
+            }
+            Logger.info('[DDP_CREATE_CONTACT] Upserting contact', { callId, phone: validatedArgs.phone });
+            const body = { locationId, phone: validatedArgs.phone };
+            if (validatedArgs.firstName)
+                body.firstName = validatedArgs.firstName;
+            if (validatedArgs.lastName)
+                body.lastName = validatedArgs.lastName;
+            if (validatedArgs.email)
+                body.email = validatedArgs.email;
+            const resp = await fetch('https://services.leadconnectorhq.com/contacts/upsert', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Version': '2021-07-28',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                Logger.error('[DDP_CREATE_CONTACT] GHL API error', { status: resp.status, data });
+                return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+            }
+            const contact = data.contact ?? data;
+            const wasNew = data.new === true;
+            Logger.info('[DDP_CREATE_CONTACT] Contact upserted', { callId, contactId: contact.id, wasNew });
+            if (callId) {
+                const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+                await this.stateStorage.storeCallMetadata(callId, {
+                    ...existing,
+                    contactId: contact.id,
+                    firstName: contact.firstName || validatedArgs.firstName || '',
+                    lastName: contact.lastName || validatedArgs.lastName || '',
+                    email: contact.email || validatedArgs.email || '',
+                    phone: contact.phone || validatedArgs.phone || '',
+                });
+            }
+            return {
+                id, ok: true,
+                data: {
+                    created: true,
+                    contactId: contact.id,
+                    firstName: contact.firstName ?? '',
+                    lastName: contact.lastName ?? '',
+                    email: contact.email ?? '',
+                    phone: contact.phone ?? '',
+                },
+            };
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+            }
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[DDP_CREATE_CONTACT] Error', { id, callId, error: msg });
+            return { id, ok: false, error: `Create contact failed: ${msg}` };
+        }
+    }
+    // ── Generic: Check if contact exists (multi-client) ────────────────
+    async handleCheckContact(id, args, callId, assistantId, customerPhone) {
+        try {
+            const validatedArgs = CheckContactArgsSchema.parse(args);
+            const search = customerPhone || validatedArgs.phone || validatedArgs.query;
+            if (!search) {
+                return { id, ok: false, error: 'A phone or query is required to check a contact' };
+            }
+            const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+            const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId)) || process.env.GHL_LOCATION_ID;
+            if (!apiKey || !locationId) {
+                Logger.error('[CHECK_CONTACT] Missing credentials', { hasApiKey: !!apiKey, hasLocationId: !!locationId });
+                return { id, ok: false, error: 'GHL credentials not configured' };
+            }
+            Logger.info('[CHECK_CONTACT] Searching contact', { callId, assistantId, search });
+            const url = `https://services.leadconnectorhq.com/contacts/?locationId=${locationId}&query=${encodeURIComponent(search)}`;
+            const resp = await fetch(url, {
+                headers: { 'Authorization': `Bearer ${apiKey}`, 'Version': '2021-07-28' },
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                Logger.error('[CHECK_CONTACT] GHL API error', { status: resp.status, data });
+                return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+            }
+            const contact = data.contacts?.[0];
+            if (!contact) {
+                Logger.info('[CHECK_CONTACT] Contact not found', { callId, search });
+                return { id, ok: true, data: { found: false, query: search } };
+            }
+            const firstName = (contact.firstName ?? '').trim();
+            const lastName = (contact.lastName ?? '').trim();
+            const email = (contact.email ?? '').trim();
+            const tags = Array.isArray(contact.tags) ? contact.tags : [];
+            const isGhostContact = !firstName && !lastName && !email;
+            if (isGhostContact) {
+                Logger.info('[CHECK_CONTACT] Ghost contact detected — treating as not found', { callId, contactId: contact.id, search });
+                return { id, ok: true, data: { found: false, query: search } };
+            }
+            Logger.info('[CHECK_CONTACT] Contact found', { callId, contactId: contact.id });
+            if (callId) {
+                const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+                await this.stateStorage.storeCallMetadata(callId, {
+                    ...existing,
+                    contactId: contact.id,
+                    firstName: existing.firstName || firstName,
+                    lastName: existing.lastName || lastName,
+                    email: existing.email || email,
+                    phone: existing.phone || contact.phone || '',
+                });
+            }
+            return {
+                id, ok: true,
+                data: {
+                    found: true,
+                    contactId: contact.id,
+                    firstName,
+                    lastName,
+                    name: `${firstName} ${lastName}`.trim(),
+                    email,
+                    phone: contact.phone ?? '',
+                    tags,
+                },
+            };
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+            }
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[CHECK_CONTACT] Error', { id, callId, error: msg });
+            return { id, ok: false, error: `Check contact failed: ${msg}` };
+        }
+    }
+    // ── Generic: Create / upsert contact (multi-client) ────────────────
+    async handleCreateContact(id, args, callId, assistantId) {
+        try {
+            const validatedArgs = CreateContactArgsSchema.parse(args);
+            const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+            const locationId = (assistantId && ClientConfigManager.getLocationId(assistantId)) || process.env.GHL_LOCATION_ID;
+            if (!apiKey || !locationId) {
+                Logger.error('[CREATE_CONTACT] Missing credentials', { hasApiKey: !!apiKey, hasLocationId: !!locationId });
+                return { id, ok: false, error: 'GHL credentials not configured' };
+            }
+            Logger.info('[CREATE_CONTACT] Upserting contact', { callId, assistantId, phone: validatedArgs.phone });
+            const body = { locationId, phone: validatedArgs.phone };
+            if (validatedArgs.firstName)
+                body.firstName = validatedArgs.firstName;
+            if (validatedArgs.lastName)
+                body.lastName = validatedArgs.lastName;
+            if (validatedArgs.email)
+                body.email = validatedArgs.email;
+            const resp = await fetch('https://services.leadconnectorhq.com/contacts/upsert', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Version': '2021-07-28',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(body),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                Logger.error('[CREATE_CONTACT] GHL API error', { status: resp.status, data });
+                return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+            }
+            const contact = data.contact ?? data;
+            const wasNew = data.new === true;
+            Logger.info('[CREATE_CONTACT] Contact upserted', { callId, contactId: contact.id, wasNew });
+            if (callId) {
+                const existing = (await this.stateStorage.getCallMetadata(callId)) || {};
+                await this.stateStorage.storeCallMetadata(callId, {
+                    ...existing,
+                    contactId: contact.id,
+                    firstName: contact.firstName || validatedArgs.firstName || '',
+                    lastName: contact.lastName || validatedArgs.lastName || '',
+                    email: contact.email || validatedArgs.email || '',
+                    phone: contact.phone || validatedArgs.phone || '',
+                });
+            }
+            return {
+                id, ok: true,
+                data: {
+                    created: true,
+                    wasNew,
+                    contactId: contact.id,
+                    firstName: contact.firstName ?? '',
+                    lastName: contact.lastName ?? '',
+                    email: contact.email ?? '',
+                    phone: contact.phone ?? '',
+                },
+            };
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+            }
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[CREATE_CONTACT] Error', { id, callId, error: msg });
+            return { id, ok: false, error: `Create contact failed: ${msg}` };
+        }
+    }
+    // ── DDP: Mark contact as transferred ───────────────────────────────
+    async handleDdpMarkTransferred(id, args, callId, assistantId) {
+        try {
+            const validatedArgs = DdpMarkTransferredArgsSchema.parse(args);
+            let contactId = validatedArgs.contactId;
+            if (!contactId && callId) {
+                const metadata = await this.stateStorage.getCallMetadata(callId);
+                contactId = metadata?.contactId;
+            }
+            if (!contactId) {
+                Logger.error('[DDP_MARK_TRANSFERRED] Missing contactId', { callId });
+                return { id, ok: false, error: 'contactId is required (none provided and none in call metadata).' };
+            }
+            const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+            if (!apiKey) {
+                Logger.error('[DDP_MARK_TRANSFERRED] Missing credentials', { hasApiKey: !!apiKey });
+                return { id, ok: false, error: 'DDP GHL credentials not configured' };
+            }
+            Logger.info('[DDP_MARK_TRANSFERRED] Adding call_transferred tag', { callId, contactId });
+            const resp = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/tags`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Version': '2021-07-28',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ tags: ['call_transferred'] }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                Logger.error('[DDP_MARK_TRANSFERRED] GHL API error', { status: resp.status, data });
+                return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+            }
+            Logger.info('[DDP_MARK_TRANSFERRED] Tag added', { callId, contactId });
+            return {
+                id, ok: true,
+                data: { tagged: true, contactId, tag: 'call_transferred' },
+            };
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+            }
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[DDP_MARK_TRANSFERRED] Error', { id, callId, error: msg });
+            return { id, ok: false, error: `Mark transferred failed: ${msg}` };
+        }
+    }
+    // ── DDP: Mark caller transferred to customer support ──────────────
+    async handleDdpMarkTransferredSupport(id, args, callId, assistantId) {
+        try {
+            const validatedArgs = DdpMarkTransferredSupportArgsSchema.parse(args);
+            let contactId = validatedArgs.contactId;
+            if (!contactId && callId) {
+                const metadata = await this.stateStorage.getCallMetadata(callId);
+                contactId = metadata?.contactId;
+            }
+            if (!contactId) {
+                Logger.error('[DDP_MARK_TRANSFERRED_SUPPORT] Missing contactId', { callId });
+                return { id, ok: false, error: 'contactId is required (none provided and none in call metadata).' };
+            }
+            const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+            if (!apiKey) {
+                Logger.error('[DDP_MARK_TRANSFERRED_SUPPORT] Missing credentials', { hasApiKey: !!apiKey });
+                return { id, ok: false, error: 'DDP GHL credentials not configured' };
+            }
+            Logger.info('[DDP_MARK_TRANSFERRED_SUPPORT] Adding support_transferred tag', { callId, contactId });
+            const resp = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/tags`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Version': '2021-07-28',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ tags: ['support_transferred'] }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                Logger.error('[DDP_MARK_TRANSFERRED_SUPPORT] GHL API error', { status: resp.status, data });
+                return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+            }
+            Logger.info('[DDP_MARK_TRANSFERRED_SUPPORT] Tag added', { callId, contactId });
+            return {
+                id, ok: true,
+                data: { tagged: true, contactId, tag: 'support_transferred' },
+            };
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+            }
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[DDP_MARK_TRANSFERRED_SUPPORT] Error', { id, callId, error: msg });
+            return { id, ok: false, error: `Mark transferred support failed: ${msg}` };
+        }
+    }
+    // ── Send text guide (triggers a GHL workflow that texts the guide) ──
+    async handleSendTextGuide(id, args, callId, assistantId) {
+        try {
+            const validatedArgs = SendTextGuideArgsSchema.parse(args);
+            let contactId = validatedArgs.contactId;
+            if (!contactId && callId) {
+                const metadata = await this.stateStorage.getCallMetadata(callId);
+                contactId = metadata?.contactId;
+            }
+            if (!contactId) {
+                Logger.error('[SEND_TEXT_GUIDE] Missing contactId', { callId });
+                return { id, ok: false, error: 'contactId is required (none provided and none in call metadata).' };
+            }
+            const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+            if (!apiKey) {
+                Logger.error('[SEND_TEXT_GUIDE] Missing credentials', { hasApiKey: !!apiKey });
+                return { id, ok: false, error: 'GHL credentials not configured' };
+            }
+            // Route to the matching guide workflow. A multi-program frontdesk sends
+            // guide_type; single-program clients omit it and get the default guide.
+            const workflowId = assistantId
+                ? (validatedArgs.guide_type === 'BACK_NECK'
+                    ? ClientConfigManager.getBackNeckGuideWorkflowId(assistantId)
+                    : ClientConfigManager.getGuideWorkflowId(assistantId))
+                : undefined;
+            if (!workflowId) {
+                Logger.error('[SEND_TEXT_GUIDE] Guide workflow not configured', { callId, assistantId, guideType: validatedArgs.guide_type });
+                return { id, ok: false, error: 'GUIDE_WORKFLOW_NOT_CONFIGURED' };
+            }
+            Logger.info('[SEND_TEXT_GUIDE] Triggering guide workflow', { callId, contactId, workflowId, guideType: validatedArgs.guide_type });
+            const resp = await fetch(`https://services.leadconnectorhq.com/contacts/${contactId}/workflow/${workflowId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Version': '2021-07-28',
+                    'Content-Type': 'application/json',
+                },
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                Logger.error('[SEND_TEXT_GUIDE] GHL API error', { status: resp.status, data });
+                return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+            }
+            Logger.info('[SEND_TEXT_GUIDE] Guide workflow triggered', { callId, contactId, workflowId });
+            return {
+                id, ok: true,
+                data: { sent: true, contactId },
+            };
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+            }
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[SEND_TEXT_GUIDE] Error', { id, callId, error: msg });
+            return { id, ok: false, error: `Send text guide failed: ${msg}` };
         }
     }
     /** Safely convert a value that might be a string or array to a readable string. */

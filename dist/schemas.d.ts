@@ -1492,32 +1492,41 @@ export declare const UpdateStageArgsSchema: z.ZodEffects<z.ZodObject<{
 export declare const CheckCalendarAvailabilityArgsSchema: z.ZodObject<{
     dateTime: z.ZodString;
     durationMinutes: z.ZodDefault<z.ZodOptional<z.ZodNumber>>;
+    program_tag: z.ZodOptional<z.ZodEnum<["NEUROPATHY", "BACK_NECK"]>>;
 }, "strip", z.ZodTypeAny, {
     dateTime: string;
     durationMinutes: number;
+    program_tag?: "NEUROPATHY" | "BACK_NECK" | undefined;
 }, {
     dateTime: string;
     durationMinutes?: number | undefined;
+    program_tag?: "NEUROPATHY" | "BACK_NECK" | undefined;
 }>;
 export declare const ScheduleAppointmentArgsSchema: z.ZodObject<{
     contactId: z.ZodOptional<z.ZodString>;
     name: z.ZodString;
     phone: z.ZodOptional<z.ZodString>;
+    email: z.ZodOptional<z.ZodString>;
     startTime: z.ZodString;
     endTime: z.ZodString;
     notes: z.ZodDefault<z.ZodOptional<z.ZodString>>;
+    program_tag: z.ZodOptional<z.ZodEnum<["NEUROPATHY", "BACK_NECK"]>>;
 }, "strip", z.ZodTypeAny, {
     name: string;
     startTime: string;
     endTime: string;
     notes: string;
     phone?: string | undefined;
+    email?: string | undefined;
+    program_tag?: "NEUROPATHY" | "BACK_NECK" | undefined;
     contactId?: string | undefined;
 }, {
     name: string;
     startTime: string;
     endTime: string;
     phone?: string | undefined;
+    email?: string | undefined;
+    program_tag?: "NEUROPATHY" | "BACK_NECK" | undefined;
     contactId?: string | undefined;
     notes?: string | undefined;
 }>;
@@ -1534,6 +1543,79 @@ export declare const SearchContactArgsSchema: z.ZodObject<{
     query: string;
 }, {
     query: string;
+}>;
+export declare const DdpCheckContactArgsSchema: z.ZodObject<{
+    phone: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    phone: string;
+}, {
+    phone: string;
+}>;
+export declare const DdpCreateContactArgsSchema: z.ZodObject<{
+    firstName: z.ZodOptional<z.ZodString>;
+    lastName: z.ZodOptional<z.ZodString>;
+    phone: z.ZodString;
+    email: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    phone: string;
+    firstName?: string | undefined;
+    email?: string | undefined;
+    lastName?: string | undefined;
+}, {
+    phone: string;
+    firstName?: string | undefined;
+    email?: string | undefined;
+    lastName?: string | undefined;
+}>;
+export declare const CheckContactArgsSchema: z.ZodObject<{
+    phone: z.ZodOptional<z.ZodString>;
+    query: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    phone?: string | undefined;
+    query?: string | undefined;
+}, {
+    phone?: string | undefined;
+    query?: string | undefined;
+}>;
+export declare const CreateContactArgsSchema: z.ZodObject<{
+    firstName: z.ZodOptional<z.ZodString>;
+    lastName: z.ZodOptional<z.ZodString>;
+    phone: z.ZodString;
+    email: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    phone: string;
+    firstName?: string | undefined;
+    email?: string | undefined;
+    lastName?: string | undefined;
+}, {
+    phone: string;
+    firstName?: string | undefined;
+    email?: string | undefined;
+    lastName?: string | undefined;
+}>;
+export declare const DdpMarkTransferredArgsSchema: z.ZodObject<{
+    contactId: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    contactId?: string | undefined;
+}, {
+    contactId?: string | undefined;
+}>;
+export declare const DdpMarkTransferredSupportArgsSchema: z.ZodObject<{
+    contactId: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    contactId?: string | undefined;
+}, {
+    contactId?: string | undefined;
+}>;
+export declare const SendTextGuideArgsSchema: z.ZodObject<{
+    contactId: z.ZodOptional<z.ZodString>;
+    guide_type: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    contactId?: string | undefined;
+    guide_type?: string | undefined;
+}, {
+    contactId?: string | undefined;
+    guide_type?: string | undefined;
 }>;
 export declare const ToolResultSchema: z.ZodObject<{
     id: z.ZodString;
@@ -1600,5 +1682,12 @@ export type CheckCalendarAvailabilityArgs = z.infer<typeof CheckCalendarAvailabi
 export type ScheduleAppointmentArgs = z.infer<typeof ScheduleAppointmentArgsSchema>;
 export type LookupCallerArgs = z.infer<typeof LookupCallerArgsSchema>;
 export type SearchContactArgs = z.infer<typeof SearchContactArgsSchema>;
+export type DdpCheckContactArgs = z.infer<typeof DdpCheckContactArgsSchema>;
+export type DdpCreateContactArgs = z.infer<typeof DdpCreateContactArgsSchema>;
+export type CheckContactArgs = z.infer<typeof CheckContactArgsSchema>;
+export type CreateContactArgs = z.infer<typeof CreateContactArgsSchema>;
+export type DdpMarkTransferredArgs = z.infer<typeof DdpMarkTransferredArgsSchema>;
+export type DdpMarkTransferredSupportArgs = z.infer<typeof DdpMarkTransferredSupportArgsSchema>;
+export type SendTextGuideArgs = z.infer<typeof SendTextGuideArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;

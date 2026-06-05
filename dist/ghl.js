@@ -114,22 +114,42 @@ export class GHLConnector {
         }
     }
     /**
-     * Get the Calendar ID based on Assistant ID
+     * Get the Calendar ID based on Assistant ID and optional calendar type.
+     * - 'main' (default): primary client calendar
+     * - 'gabriel': DDP secondary calendar (collections under $40K)
+     * - 'callback': callback/recall calendar
      */
-    getCalendarId() {
-        if (this.assistantId) {
-            const calendarId = ClientConfigManager.getCalendarId(this.assistantId);
-            if (calendarId) {
-                Logger.info('[GHL_CONNECTOR] Using client-specific calendar ID', {
-                    assistantId: this.assistantId,
-                    clientName: ClientConfigManager.getClientName(this.assistantId),
-                    calendarId,
-                });
-                return calendarId;
-            }
+    getCalendarId(calendarType = 'main') {
+        if (!this.assistantId) {
+            Logger.warn('[GHL_CONNECTOR] No assistantId set on connector');
+            return null;
+        }
+        let calendarId;
+        switch (calendarType) {
+            case 'gabriel':
+                calendarId = ClientConfigManager.getGabrielCalendarId(this.assistantId);
+                break;
+            case 'callback':
+                calendarId = ClientConfigManager.getCallbackCalendarId(this.assistantId);
+                break;
+            case 'backneck':
+                calendarId = ClientConfigManager.getBackNeckCalendarId(this.assistantId);
+                break;
+            default:
+                calendarId = ClientConfigManager.getCalendarId(this.assistantId);
+        }
+        if (calendarId) {
+            Logger.info('[GHL_CONNECTOR] Using calendar ID', {
+                assistantId: this.assistantId,
+                clientName: ClientConfigManager.getClientName(this.assistantId),
+                calendarType,
+                calendarId,
+            });
+            return calendarId;
         }
         Logger.warn('[GHL_CONNECTOR] No calendar ID found for assistant', {
             assistantId: this.assistantId,
+            calendarType,
         });
         return null;
     }
@@ -466,9 +486,9 @@ export class GHLConnector {
             };
         }
     }
-    async checkCalendarAvailability(id, args, _callId, _stateStorage) {
+    async checkCalendarAvailability(id, args, _callId, _stateStorage, calendarType = 'main') {
         try {
-            Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args });
+            Logger.info('[CALENDAR] Processing check_calendar_availability', { id, args, calendarType });
             const ghlApiKey = this.getGHLApiKey();
             if (!ghlApiKey) {
                 const error = 'GHL_API_KEY not configured for this client';
@@ -479,7 +499,7 @@ export class GHLConnector {
                     error,
                 };
             }
-            const calendarId = this.getCalendarId();
+            const calendarId = this.getCalendarId(calendarType);
             if (!calendarId) {
                 const error = 'Calendar ID not configured for this client';
                 Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
@@ -509,10 +529,11 @@ export class GHLConnector {
             }
             // Calculate end time based on duration
             const endDate = new Date(requestedDate.getTime() + (args.durationMinutes || 30) * 60000);
-            // Query GHL Calendar API for free slots
-            // We'll check a range around the requested time
-            const startDate = new Date(requestedDate.getTime() - 60 * 60000); // 1 hour before
-            const endDateRange = new Date(requestedDate.getTime() + 2 * 60 * 60000); // 2 hours after
+            // Query GHL Calendar API for free slots over a wide window so that, when
+            // the requested day has nothing open, we can surface the next real slots
+            // to the AI instead of forcing it to blindly guess another day.
+            const startDate = new Date(requestedDate.getTime() - 24 * 60 * 60000); // 24h before
+            const endDateRange = new Date(requestedDate.getTime() + 14 * 24 * 60 * 60000); // 14 days after
             const apiUrl = `https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots`;
             const params = new URLSearchParams({
                 startDate: startDate.getTime().toString(),
@@ -560,49 +581,134 @@ export class GHLConnector {
                 responseDataKeys: response.data ? Object.keys(response.data) : [],
                 responseDataType: typeof response.data,
             });
-            // GHL returns slots organized by date: { "2025-12-23": { "slots": [...] } }
-            // Extract the date key for the requested date (format: YYYY-MM-DD)
-            const requestedDateKey = requestedDate.toISOString().split('T')[0];
-            // Get slots for the requested date
-            const dateSlots = requestedDateKey && response.data ? response.data[requestedDateKey] : null;
-            const freeSlots = dateSlots?.slots || [];
+            // GHL groups slots by date in the calendar's own timezone:
+            //   { "2026-05-14": { "slots": ["2026-05-14T10:00:00-04:00", ...] }, ... }
+            // To avoid UTC date-key drift (e.g. 10pm EDT = 2am UTC next day) we
+            // flatten every date key in the response into one list and then filter
+            // by the offset embedded in each slot's ISO string.
+            const responseData = response.data && typeof response.data === 'object' ? response.data : {};
+            const allSlots = [];
+            const dateKeysWithSlots = [];
+            for (const [key, value] of Object.entries(responseData)) {
+                if (value && typeof value === 'object' && Array.isArray(value.slots)) {
+                    const slots = value.slots;
+                    if (slots.length > 0) {
+                        dateKeysWithSlots.push(key);
+                        allSlots.push(...slots);
+                    }
+                }
+            }
+            // Extract the local date portion (YYYY-MM-DD) using the offset embedded
+            // in each ISO string, so we compare apples to apples regardless of TZ.
+            const localDateOf = (iso) => iso.slice(0, 10);
+            const requestedLocalDate = localDateOf(args.dateTime);
+            const slotsForRequestedDay = allSlots
+                .filter(s => localDateOf(s) === requestedLocalDate)
+                .sort();
             Logger.info('[CALENDAR] Free slots from GHL', {
                 id,
-                requestedDateKey,
-                freeSlotsCount: freeSlots.length,
-                freeSlots: freeSlots,
+                requestedLocalDate,
+                dateKeysWithSlots,
+                totalSlotsReturned: allSlots.length,
+                slotsForRequestedDayCount: slotsForRequestedDay.length,
+                slotsForRequestedDay,
                 requestedDate: requestedDate.toISOString(),
-                requestedDateTimestamp: requestedDate.getTime(),
                 endDate: endDate.toISOString(),
-                endDateTimestamp: endDate.getTime(),
             });
-            // GHL returns slots as ISO string times (e.g., "2025-12-23T10:00:00-05:00")
-            // Check if the requested time matches any of the available slot start times
-            // Since slots are 30-minute intervals, we check if requestedDate matches a slot start time
-            const isAvailable = freeSlots.some((slotTime) => {
+            // Compare slot start times to the requested time. We accept a match
+            // either by exact UTC instant (1-minute tolerance) OR by local wall
+            // clock (YYYY-MM-DDTHH:MM). The LLM frequently re-emits a slot with
+            // the doctor's local TZ offset (e.g. "-04:00") instead of the calendar's
+            // own offset (e.g. "-06:00") — different UTC moments but the same wall
+            // clock the doctor heard. Treating wall-clock matches as available keeps
+            // the booking flow accurate to what the doctor actually agreed to.
+            const wallClockOf = (iso) => iso.slice(0, 16);
+            const requestedWallClock = wallClockOf(args.dateTime);
+            const isAvailable = slotsForRequestedDay.some((slotTime) => {
+                if (wallClockOf(slotTime) === requestedWallClock)
+                    return true;
                 const slotDate = new Date(slotTime);
-                // Check if the requested time matches the slot start time (within 1 minute tolerance)
                 const timeDiff = Math.abs(requestedDate.getTime() - slotDate.getTime());
-                const matches = timeDiff < 60000; // 1 minute tolerance
-                Logger.debug('[CALENDAR] Comparing slot', {
-                    slotTime,
-                    slotDate: slotDate.toISOString(),
-                    slotDateTimestamp: slotDate.getTime(),
-                    requestedDate: requestedDate.toISOString(),
-                    requestedDateTimestamp: requestedDate.getTime(),
-                    timeDiffMs: timeDiff,
-                    matches,
-                });
-                return matches;
+                return timeDiff < 60000;
             });
+            // Format slots in a human-friendly way (e.g. "10:00 AM") so the AI can
+            // read them directly to the doctor without parsing ISO strings.
+            const formatSlot = (iso) => {
+                const offsetMatch = iso.match(/([+-]\d{2}:\d{2})$/);
+                const offset = offsetMatch ? offsetMatch[1] : '';
+                const parts = iso.slice(11, 16).split(':').map(Number);
+                const h = parts[0] ?? 0;
+                const m = parts[1] ?? 0;
+                const hr12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                return `${hr12}:${m.toString().padStart(2, '0')} ${ampm}${offset ? ` (${offset})` : ''}`;
+            };
+            // Format a slot with its weekday + date so the AI can offer it from
+            // any day in the search window without having to compute the calendar
+            // day itself. The format is offset-agnostic: we shift the UTC instant
+            // by the embedded offset and then read fields in UTC, which yields the
+            // local wall-clock the slot was published in.
+            const formatSlotWithDate = (iso) => {
+                const offsetMatch = iso.match(/([+-])(\d{2}):(\d{2})$/);
+                if (!offsetMatch)
+                    return iso;
+                const sign = offsetMatch[1] === '+' ? 1 : -1;
+                const oh = parseInt(offsetMatch[2] ?? '0', 10);
+                const om = parseInt(offsetMatch[3] ?? '0', 10);
+                const offsetMs = sign * (oh * 60 + om) * 60000;
+                const shifted = new Date(new Date(iso).getTime() + offsetMs);
+                const weekday = shifted.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' });
+                const month = shifted.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+                const dayNum = shifted.getUTCDate();
+                const h24 = shifted.getUTCHours();
+                const m = shifted.getUTCMinutes();
+                const hr12 = h24 === 0 ? 12 : h24 > 12 ? h24 - 12 : h24;
+                const ampm = h24 >= 12 ? 'PM' : 'AM';
+                return `${weekday}, ${month} ${dayNum} at ${hr12}:${m.toString().padStart(2, '0')} ${ampm}`;
+            };
+            const formattedSlotsForDay = slotsForRequestedDay.map(formatSlot);
+            const slotsForResponse = slotsForRequestedDay.slice(0, 10);
+            // When the requested day has no slots, surface the next real openings
+            // from the wider 14-day window so the AI can offer a concrete time
+            // instead of guessing another day blindly. Take up to 2 slots per day,
+            // max 8 total — enough real options without flooding the prompt.
+            const nextAvailableSlots = [];
+            const nextAvailableSlotsFormatted = [];
+            if (slotsForRequestedDay.length === 0) {
+                const requestedMs = requestedDate.getTime();
+                const upcoming = allSlots
+                    .filter(s => {
+                    const d = new Date(s).getTime();
+                    return !Number.isNaN(d) && d >= requestedMs;
+                })
+                    .sort();
+                const perDayCount = new Map();
+                for (const slot of upcoming) {
+                    const day = localDateOf(slot);
+                    const count = perDayCount.get(day) ?? 0;
+                    if (count >= 2)
+                        continue;
+                    perDayCount.set(day, count + 1);
+                    nextAvailableSlots.push(slot);
+                    nextAvailableSlotsFormatted.push(formatSlotWithDate(slot));
+                    if (nextAvailableSlots.length >= 8)
+                        break;
+                }
+            }
             Logger.info('[CALENDAR] Availability check completed', {
                 id,
                 requestedTime: requestedDate.toISOString(),
                 isAvailable,
-                freeSlotsCount: freeSlots.length,
+                slotsForRequestedDayCount: slotsForRequestedDay.length,
+                nextAvailableCount: nextAvailableSlots.length,
             });
-            // When unavailable, include the actual available slots for the day so the AI can offer alternatives
-            const availableSlotsForDay = freeSlots.slice(0, 10); // up to 10 slots
+            const baseMessage = isAvailable
+                ? 'The requested time slot is available.'
+                : slotsForRequestedDay.length > 0
+                    ? `The requested time slot is not available. Other open slots on ${requestedLocalDate}: ${formattedSlotsForDay.slice(0, 10).join(', ')}.`
+                    : nextAvailableSlots.length > 0
+                        ? `No open slots on ${requestedLocalDate}. The next available openings are: ${nextAvailableSlotsFormatted.join(', ')}. Offer one of these to the caller — do not invent other days or times.`
+                        : `No open slots on ${requestedLocalDate} or within the next 14 days. Offer to transfer the caller or schedule a callback.`;
             return {
                 id,
                 ok: true,
@@ -610,12 +716,16 @@ export class GHLConnector {
                     available: isAvailable,
                     requestedTime: requestedDate.toISOString(),
                     duration: args.durationMinutes || 30,
-                    message: isAvailable
-                        ? 'The requested time slot is available'
-                        : freeSlots.length > 0
-                            ? `The requested time slot is not available. Available slots for this day: ${availableSlotsForDay.join(', ')}`
-                            : 'The requested time slot is not available and there are no open slots for this day.',
-                    ...(isAvailable ? {} : { availableSlots: availableSlotsForDay }),
+                    message: baseMessage,
+                    ...(isAvailable
+                        ? {}
+                        : {
+                            availableSlots: slotsForResponse,
+                            availableSlotsFormatted: formattedSlotsForDay.slice(0, 10),
+                            ...(nextAvailableSlots.length > 0
+                                ? { nextAvailableSlots, nextAvailableSlotsFormatted }
+                                : {}),
+                        }),
                 },
             };
         }
@@ -632,11 +742,12 @@ export class GHLConnector {
             };
         }
     }
-    async scheduleAppointment(id, args, ghlMetadata, _callId, _stateStorage) {
+    async scheduleAppointment(id, args, ghlMetadata, _callId, _stateStorage, calendarType = 'main') {
         try {
             Logger.info('[CALENDAR] Processing schedule_appointment', {
                 id,
                 args,
+                calendarType,
                 hasGhlMetadata: !!ghlMetadata,
                 ghlMetadataKeys: ghlMetadata ? Object.keys(ghlMetadata) : [],
                 ghlMetadataContact: ghlMetadata?.contact ? {
@@ -660,10 +771,10 @@ export class GHLConnector {
                     error,
                 };
             }
-            const calendarId = this.getCalendarId();
+            const calendarId = this.getCalendarId(calendarType);
             if (!calendarId) {
                 const error = 'Calendar ID not configured for this client';
-                Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId });
+                Logger.error('[CALENDAR] ' + error, { id, assistantId: this.assistantId, calendarType });
                 return {
                     id,
                     ok: false,
@@ -870,13 +981,60 @@ export class GHLConnector {
             // Create appointment in GHL Calendar using the correct endpoint
             // GHL requires: /calendars/events/appointments with firstName, lastName, phone, selectedSlot
             const apiUrl = `https://services.leadconnectorhq.com/calendars/events/appointments`;
-            // GHL expects selectedSlot as ISO string with timezone
-            // Use correctedStartTime (already corrected above)
-            // If startTime is already in correct format, use it; otherwise convert
+            // GHL expects selectedSlot as ISO string with the calendar's own timezone
+            // offset. The LLM frequently re-emits a slot we returned in (e.g.) "-06:00"
+            // with the doctor's local offset (e.g. "-04:00") because it normalizes to
+            // the spoken timezone. That mismatch makes GHL reject the booking with
+            // "the slot you have selected is no longer available". Reconcile by
+            // querying free-slots for the requested day and matching on the local
+            // wall-clock (date + HH:MM) — that recovers the canonical ISO from GHL.
             let selectedSlot = correctedStartTime;
-            if (!selectedSlot.includes('-05:00') && !selectedSlot.includes('-04:00') && !selectedSlot.includes('-06:00')) {
-                // If no timezone, assume EST and add it
-                const date = new Date(correctedStartTime);
+            try {
+                const dayStartMs = startTime.getTime() - 24 * 60 * 60000;
+                const dayEndMs = startTime.getTime() + 24 * 60 * 60000;
+                const slotsResp = await this.httpClient.get(`https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots?startDate=${dayStartMs}&endDate=${dayEndMs}`, {
+                    headers: {
+                        'Authorization': `Bearer ${ghlApiKey}`,
+                        'Content-Type': 'application/json',
+                        'Version': '2021-07-28',
+                    },
+                });
+                if (slotsResp.ok && slotsResp.data && typeof slotsResp.data === 'object') {
+                    const flatSlots = [];
+                    for (const v of Object.values(slotsResp.data)) {
+                        if (v && Array.isArray(v.slots)) {
+                            flatSlots.push(...v.slots);
+                        }
+                    }
+                    const requestedWallClock = correctedStartTime.slice(0, 16);
+                    const match = flatSlots.find(s => s.slice(0, 16) === requestedWallClock);
+                    if (match) {
+                        Logger.info('[CALENDAR] Reconciled slot via wall-clock match', {
+                            id,
+                            requested: correctedStartTime,
+                            resolved: match,
+                        });
+                        selectedSlot = match;
+                    }
+                    else {
+                        Logger.warn('[CALENDAR] No wall-clock match; will pass AI value as-is', {
+                            id,
+                            requested: correctedStartTime,
+                            flatSlotsCount: flatSlots.length,
+                            sampleSlots: flatSlots.slice(0, 5),
+                        });
+                    }
+                }
+            }
+            catch (err) {
+                Logger.warn('[CALENDAR] Slot reconciliation failed; using AI value as-is', {
+                    id,
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            }
+            // Fallback: if the slot still has no offset at all, assume EST.
+            if (!/[+-]\d{2}:\d{2}$/.test(selectedSlot)) {
+                const date = new Date(selectedSlot);
                 selectedSlot = date.toISOString().replace('Z', '-05:00');
             }
             // Normalize phone number - GHL requires E.164 format (with + and country code)
@@ -1011,6 +1169,64 @@ export class GHLConnector {
                     ok: false,
                     error,
                 };
+            }
+            // If the AI collected an email at scheduling time, persist it on the
+            // existing contact ONLY when the contact has no email yet. Best-effort:
+            // booking proceeds even if the lookup or update fails.
+            if (args.email && contactIdToUse) {
+                try {
+                    const lookupResp = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/${contactIdToUse}`, {
+                        headers: {
+                            'Authorization': `Bearer ${ghlApiKey}`,
+                            'Content-Type': 'application/json',
+                            'Version': '2021-07-28',
+                        },
+                    });
+                    const existingContact = lookupResp.data?.contact || lookupResp.data;
+                    const existingEmail = (existingContact?.email ?? '').trim();
+                    if (!lookupResp.ok) {
+                        Logger.warn('[CALENDAR] Contact lookup before email update failed; skipping update', {
+                            id,
+                            contactId: contactIdToUse,
+                            status: lookupResp.status,
+                        });
+                    }
+                    else if (existingEmail) {
+                        Logger.info('[CALENDAR] Contact already has an email; skipping update', {
+                            id,
+                            contactId: contactIdToUse,
+                        });
+                    }
+                    else {
+                        Logger.info('[CALENDAR] Contact email empty — saving from scheduling args', {
+                            id,
+                            contactId: contactIdToUse,
+                        });
+                        const updateResp = await fetch(`https://services.leadconnectorhq.com/contacts/${contactIdToUse}`, {
+                            method: 'PUT',
+                            headers: {
+                                'Authorization': `Bearer ${ghlApiKey}`,
+                                'Content-Type': 'application/json',
+                                'Version': '2021-07-28',
+                            },
+                            body: JSON.stringify({ email: args.email }),
+                        });
+                        if (!updateResp.ok) {
+                            Logger.warn('[CALENDAR] Email update returned non-OK; continuing with booking', {
+                                id,
+                                contactId: contactIdToUse,
+                                status: updateResp.status,
+                            });
+                        }
+                    }
+                }
+                catch (err) {
+                    Logger.warn('[CALENDAR] Email update flow failed; continuing with booking', {
+                        id,
+                        contactId: contactIdToUse,
+                        error: err instanceof Error ? err.message : String(err),
+                    });
+                }
             }
             // Use contactId in payload (required by GHL)
             const payload = {

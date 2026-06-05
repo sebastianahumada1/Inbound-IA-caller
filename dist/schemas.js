@@ -197,20 +197,55 @@ export const UpdateStageArgsSchema = z.object({
 export const CheckCalendarAvailabilityArgsSchema = z.object({
     dateTime: z.string().min(1),
     durationMinutes: z.number().optional().default(30),
+    // Program routing for multi-program frontdesk assistants (e.g. Miami Valley).
+    // Absent for single-program clients (defaults to the main calendar).
+    program_tag: z.enum(['NEUROPATHY', 'BACK_NECK']).optional(),
 });
 export const ScheduleAppointmentArgsSchema = z.object({
     contactId: z.string().optional(),
     name: z.string().min(1),
     phone: z.string().optional(),
+    email: z.string().email().optional(),
     startTime: z.string().min(1),
     endTime: z.string().min(1),
     notes: z.string().optional().default(''),
+    program_tag: z.enum(['NEUROPATHY', 'BACK_NECK']).optional(),
 });
 export const LookupCallerArgsSchema = z.object({
     phone: z.string().min(1),
 });
 export const SearchContactArgsSchema = z.object({
     query: z.string().min(1),
+});
+export const DdpCheckContactArgsSchema = z.object({
+    phone: z.string().min(1),
+});
+export const DdpCreateContactArgsSchema = z.object({
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    phone: z.string().min(1),
+    email: z.string().email().optional(),
+});
+// Generic (multi-client) contact tools
+export const CheckContactArgsSchema = z.object({
+    phone: z.string().optional(),
+    query: z.string().optional(),
+});
+export const CreateContactArgsSchema = z.object({
+    firstName: z.string().optional(),
+    lastName: z.string().optional(),
+    phone: z.string().min(1),
+    email: z.string().email().optional(),
+});
+export const DdpMarkTransferredArgsSchema = z.object({
+    contactId: z.string().optional(),
+});
+export const DdpMarkTransferredSupportArgsSchema = z.object({
+    contactId: z.string().optional(),
+});
+export const SendTextGuideArgsSchema = z.object({
+    contactId: z.string().optional(),
+    guide_type: z.string().optional(), // informational; program is resolved by assistant
 });
 // Response schemas
 export const ToolResultSchema = z.object({

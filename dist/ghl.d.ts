@@ -23,7 +23,10 @@ export declare class GHLConnector {
         contact: any;
     } | null>;
     /**
-     * Get the Calendar ID based on Assistant ID
+     * Get the Calendar ID based on Assistant ID and optional calendar type.
+     * - 'main' (default): primary client calendar
+     * - 'gabriel': DDP secondary calendar (collections under $40K)
+     * - 'callback': callback/recall calendar
      */
     private getCalendarId;
     sendSms(id: string, args: SendSmsArgs): Promise<ToolResult>;
@@ -32,6 +35,6 @@ export declare class GHLConnector {
     addNote(id: string, args: AddNoteArgs): Promise<ToolResult>;
     updateStage(id: string, args: UpdateStageArgs): Promise<ToolResult>;
     addNoteByContactIdViaAPI(id: string, contactId: string, note: string): Promise<ToolResult>;
-    checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any): Promise<ToolResult>;
-    scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any): Promise<ToolResult>;
+    checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any, calendarType?: 'main' | 'gabriel' | 'callback' | 'backneck'): Promise<ToolResult>;
+    scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any, calendarType?: 'main' | 'gabriel' | 'callback' | 'backneck'): Promise<ToolResult>;
 }
