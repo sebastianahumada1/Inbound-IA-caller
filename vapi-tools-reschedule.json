@@ -1,0 +1,42 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "reschedule_appointment_inbound",
+      "description": "Reagenda (cambia de fecha/hora) una cita YA EXISTENTE y activa del paciente en el calendario principal del cliente. Úsala cuando el paciente dice que ya tiene una cita agendada y quiere moverla a otro horario — NO uses schedule_appointment_inbound en ese caso. Llama esta tool solo después de confirmar disponibilidad del nuevo horario con check_ddp_availability_inbound y de obtener la confirmación del paciente. El servidor localiza automáticamente la próxima cita activa del contacto usando su teléfono o contactId, así que no necesitas el ID de la cita.",
+      "parameters": {
+        "type": "object",
+        "required": [
+          "newStartTime",
+          "newEndTime"
+        ],
+        "properties": {
+          "phone": {
+            "type": "string",
+            "description": "Número de teléfono del paciente. Se usa para localizar su cita existente si no se conoce el contactId."
+          },
+          "contactId": {
+            "type": "string",
+            "description": "ID del contacto en GHL si está disponible (opcional). Tiene prioridad sobre el teléfono para localizar la cita."
+          },
+          "appointmentId": {
+            "type": "string",
+            "description": "ID del evento/cita en GHL si ya lo conoces (opcional). Si no se envía, el servidor busca automáticamente la próxima cita activa del contacto."
+          },
+          "newStartTime": {
+            "type": "string",
+            "description": "NUEVA fecha y hora de inicio EXACTA que el paciente solicitó, en formato ISO 8601 con la zona horaria del cliente. CRÍTICO: usa la hora EXACTA que mencionó el usuario — NO conviertas a UTC. Si dijo '10 AM' envía '10:00:00' en su timezone (ej: '2026-01-28T10:00:00-06:00'). NUNCA uses formato UTC (Z)."
+          },
+          "newEndTime": {
+            "type": "string",
+            "description": "NUEVA fecha y hora de fin en formato ISO 8601 con la misma zona horaria que newStartTime. Calcula newEndTime = newStartTime + duración de la cita."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Notas adicionales sobre el cambio de la cita (opcional)."
+          }
+        }
+      }
+    }
+  }
+]

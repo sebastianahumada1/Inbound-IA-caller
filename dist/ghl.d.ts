@@ -1,4 +1,4 @@
-import { SendSmsArgs, UpsertContactArgs, AddTagArgs, AddNoteArgs, UpdateStageArgs, CheckCalendarAvailabilityArgs, ScheduleAppointmentArgs, ToolResult } from './schemas.js';
+import { SendSmsArgs, UpsertContactArgs, AddTagArgs, AddNoteArgs, UpdateStageArgs, CheckCalendarAvailabilityArgs, ScheduleAppointmentArgs, RescheduleAppointmentArgs, ToolResult } from './schemas.js';
 export declare class GHLConnector {
     private httpClient;
     private readonly defaultWebhookUrl;
@@ -37,4 +37,24 @@ export declare class GHLConnector {
     addNoteByContactIdViaAPI(id: string, contactId: string, note: string): Promise<ToolResult>;
     checkCalendarAvailability(id: string, args: CheckCalendarAvailabilityArgs, _callId?: string, _stateStorage?: any, calendarType?: 'main' | 'gabriel' | 'callback' | 'backneck'): Promise<ToolResult>;
     scheduleAppointment(id: string, args: ScheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any, calendarType?: 'main' | 'gabriel' | 'callback' | 'backneck'): Promise<ToolResult>;
+    /**
+     * Reconcile an AI-provided ISO start time against GHL's canonical free slots.
+     *
+     * The LLM frequently re-emits a slot we returned (e.g. in "-06:00") using the
+     * caller's local offset (e.g. "-04:00") — a different UTC instant but the same
+     * wall clock. GHL then rejects it as "no longer available". We recover the
+     * canonical ISO by matching on the local wall-clock (YYYY-MM-DDTHH:MM). Falls
+     * back to the AI value (with an EST offset if none is present) when no match.
+     */
+    private reconcileSlot;
+    /**
+     * Reschedule an existing, active appointment to a new time slot.
+     *
+     * Flow: resolve the contact (from args / metadata / phone search) → find the
+     * contact's next active appointment on the target calendar (unless the AI
+     * passed an explicit appointmentId) → reconcile the new slot against GHL's
+     * free-slots → PUT the event in place so the same appointmentId and history
+     * are preserved.
+     */
+    rescheduleAppointment(id: string, args: RescheduleAppointmentArgs, ghlMetadata?: any, _callId?: string, _stateStorage?: any, calendarType?: 'main' | 'gabriel' | 'callback' | 'backneck'): Promise<ToolResult>;
 }

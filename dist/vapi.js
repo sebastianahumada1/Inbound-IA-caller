@@ -5,7 +5,7 @@ import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
 import { ClientConfigManager } from './utils/client-config.js';
-import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, LookupCallerArgsSchema, SearchContactArgsSchema, DdpCheckContactArgsSchema, DdpCreateContactArgsSchema, DdpMarkTransferredArgsSchema, DdpMarkTransferredSupportArgsSchema, SendTextGuideArgsSchema, CheckContactArgsSchema, CreateContactArgsSchema, } from './schemas.js';
+import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, RescheduleAppointmentArgsSchema, LookupCallerArgsSchema, SearchContactArgsSchema, DdpCheckContactArgsSchema, DdpCreateContactArgsSchema, DdpMarkTransferredArgsSchema, DdpMarkTransferredSupportArgsSchema, SendTextGuideArgsSchema, CheckContactArgsSchema, CreateContactArgsSchema, } from './schemas.js';
 import { hotProspectorSearchByPhone } from './lib/hotProspector.js';
 export class VapiWebhookHandler {
     ghlConnector;
@@ -247,6 +247,14 @@ export class VapiWebhookHandler {
                     return await this.handleScheduleAppointment(id, args, ghlMetadata, callId, 'gabriel');
                 case 'schedule_callback_inbound':
                     return await this.handleScheduleAppointment(id, args, ghlMetadata, callId, 'callback');
+                case 'reschedule_appointment':
+                case 'reschedule_appointment_inbound':
+                case 'reschedule_ddp_inbound':
+                    return await this.handleRescheduleAppointment(id, args, ghlMetadata, callId);
+                case 'reschedule_gabriel_inbound':
+                    return await this.handleRescheduleAppointment(id, args, ghlMetadata, callId, 'gabriel');
+                case 'reschedule_callback_inbound':
+                    return await this.handleRescheduleAppointment(id, args, ghlMetadata, callId, 'callback');
                 case 'lookup_caller':
                     return await this.handleLookupCaller(id, args, callId, customerPhone);
                 case 'search_contact':
@@ -427,6 +435,26 @@ export class VapiWebhookHandler {
         catch (error) {
             if (error instanceof ZodError) {
                 Logger.error('Invalid schedule_appointment arguments', { id, errors: error.issues });
+                return {
+                    id,
+                    ok: false,
+                    error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+                };
+            }
+            throw error;
+        }
+    }
+    async handleRescheduleAppointment(id, args, ghlMetadata, callId, calendarType = 'main') {
+        try {
+            const validatedArgs = RescheduleAppointmentArgsSchema.parse(args);
+            // Mirror the program_tag routing used by the scheduling flows so we look
+            // up and update the appointment on the correct calendar.
+            const effectiveType = calendarType === 'main' && validatedArgs.program_tag === 'BACK_NECK' ? 'backneck' : calendarType;
+            return await this.ghlConnector.rescheduleAppointment(id, validatedArgs, ghlMetadata, callId, this.stateStorage, effectiveType);
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                Logger.error('Invalid reschedule_appointment arguments', { id, errors: error.issues });
                 return {
                     id,
                     ok: false,

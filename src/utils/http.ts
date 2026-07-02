@@ -81,13 +81,74 @@ export class HttpClient {
     }
   }
 
-  async get<T = any>(
-    url: string, 
+  async put<T = any>(
+    url: string,
+    body: any,
     options: HttpClientOptions = {}
   ): Promise<HttpResponse<T>> {
     const controller = new AbortController();
     const timeout = options.timeout || this.defaultTimeout;
-    
+
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      Logger.debug('HTTP PUT Request', { url, body });
+
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          ...this.defaultHeaders,
+          ...options.headers,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      let data: T;
+      const contentType = response.headers.get('content-type');
+
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        data = await response.text() as T;
+      }
+
+      const result: HttpResponse<T> = {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        data,
+        headers: response.headers,
+      };
+
+      Logger.debug('HTTP PUT Response', {
+        url,
+        status: response.status,
+        ok: response.ok
+      });
+
+      return result;
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${timeout}ms`);
+      }
+
+      Logger.error('HTTP PUT Error', { url, error: error instanceof Error ? error.message : 'Unknown error' });
+      throw error;
+    }
+  }
+
+  async get<T = any>(
+    url: string,
+    options: HttpClientOptions = {}
+  ): Promise<HttpResponse<T>> {
+    const controller = new AbortController();
+    const timeout = options.timeout || this.defaultTimeout;
+
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {

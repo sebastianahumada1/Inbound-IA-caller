@@ -13,5 +13,6 @@ export declare class HttpClient {
     private readonly defaultTimeout;
     private readonly defaultHeaders;
     post<T = any>(url: string, body: any, options?: HttpClientOptions): Promise<HttpResponse<T>>;
+    put<T = any>(url: string, body: any, options?: HttpClientOptions): Promise<HttpResponse<T>>;
     get<T = any>(url: string, options?: HttpClientOptions): Promise<HttpResponse<T>>;
 }

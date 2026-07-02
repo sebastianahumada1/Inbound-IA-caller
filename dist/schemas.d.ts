@@ -1530,6 +1530,47 @@ export declare const ScheduleAppointmentArgsSchema: z.ZodObject<{
     contactId?: string | undefined;
     notes?: string | undefined;
 }>;
+export declare const RescheduleAppointmentArgsSchema: z.ZodEffects<z.ZodObject<{
+    contactId: z.ZodOptional<z.ZodString>;
+    phone: z.ZodOptional<z.ZodString>;
+    appointmentId: z.ZodOptional<z.ZodString>;
+    newStartTime: z.ZodString;
+    newEndTime: z.ZodString;
+    notes: z.ZodOptional<z.ZodString>;
+    program_tag: z.ZodOptional<z.ZodEnum<["NEUROPATHY", "BACK_NECK"]>>;
+}, "strip", z.ZodTypeAny, {
+    newStartTime: string;
+    newEndTime: string;
+    phone?: string | undefined;
+    program_tag?: "NEUROPATHY" | "BACK_NECK" | undefined;
+    contactId?: string | undefined;
+    notes?: string | undefined;
+    appointmentId?: string | undefined;
+}, {
+    newStartTime: string;
+    newEndTime: string;
+    phone?: string | undefined;
+    program_tag?: "NEUROPATHY" | "BACK_NECK" | undefined;
+    contactId?: string | undefined;
+    notes?: string | undefined;
+    appointmentId?: string | undefined;
+}>, {
+    newStartTime: string;
+    newEndTime: string;
+    phone?: string | undefined;
+    program_tag?: "NEUROPATHY" | "BACK_NECK" | undefined;
+    contactId?: string | undefined;
+    notes?: string | undefined;
+    appointmentId?: string | undefined;
+}, {
+    newStartTime: string;
+    newEndTime: string;
+    phone?: string | undefined;
+    program_tag?: "NEUROPATHY" | "BACK_NECK" | undefined;
+    contactId?: string | undefined;
+    notes?: string | undefined;
+    appointmentId?: string | undefined;
+}>;
 export declare const LookupCallerArgsSchema: z.ZodObject<{
     phone: z.ZodString;
 }, "strip", z.ZodTypeAny, {
@@ -1680,6 +1721,7 @@ export type AddNoteArgs = z.infer<typeof AddNoteArgsSchema>;
 export type UpdateStageArgs = z.infer<typeof UpdateStageArgsSchema>;
 export type CheckCalendarAvailabilityArgs = z.infer<typeof CheckCalendarAvailabilityArgsSchema>;
 export type ScheduleAppointmentArgs = z.infer<typeof ScheduleAppointmentArgsSchema>;
+export type RescheduleAppointmentArgs = z.infer<typeof RescheduleAppointmentArgsSchema>;
 export type LookupCallerArgs = z.infer<typeof LookupCallerArgsSchema>;
 export type SearchContactArgs = z.infer<typeof SearchContactArgsSchema>;
 export type DdpCheckContactArgs = z.infer<typeof DdpCheckContactArgsSchema>;

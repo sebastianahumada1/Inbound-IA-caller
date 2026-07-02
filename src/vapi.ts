@@ -17,6 +17,7 @@ import {
   UpdateStageArgsSchema,
   CheckCalendarAvailabilityArgsSchema,
   ScheduleAppointmentArgsSchema,
+  RescheduleAppointmentArgsSchema,
   LookupCallerArgsSchema,
   SearchContactArgsSchema,
   DdpCheckContactArgsSchema,
@@ -320,6 +321,17 @@ export class VapiWebhookHandler {
         case 'schedule_callback_inbound':
           return await this.handleScheduleAppointment(id, args, ghlMetadata, callId, 'callback');
 
+        case 'reschedule_appointment':
+        case 'reschedule_appointment_inbound':
+        case 'reschedule_ddp_inbound':
+          return await this.handleRescheduleAppointment(id, args, ghlMetadata, callId);
+
+        case 'reschedule_gabriel_inbound':
+          return await this.handleRescheduleAppointment(id, args, ghlMetadata, callId, 'gabriel');
+
+        case 'reschedule_callback_inbound':
+          return await this.handleRescheduleAppointment(id, args, ghlMetadata, callId, 'callback');
+
         case 'lookup_caller':
           return await this.handleLookupCaller(id, args, callId, customerPhone);
 
@@ -513,6 +525,26 @@ export class VapiWebhookHandler {
     } catch (error) {
       if (error instanceof ZodError) {
         Logger.error('Invalid schedule_appointment arguments', { id, errors: error.issues });
+        return {
+          id,
+          ok: false,
+          error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}`,
+        };
+      }
+      throw error;
+    }
+  }
+
+  private async handleRescheduleAppointment(id: string, args: any, ghlMetadata?: any, callId?: string, calendarType: 'main' | 'gabriel' | 'callback' | 'backneck' = 'main'): Promise<ToolResult> {
+    try {
+      const validatedArgs = RescheduleAppointmentArgsSchema.parse(args);
+      // Mirror the program_tag routing used by the scheduling flows so we look
+      // up and update the appointment on the correct calendar.
+      const effectiveType = calendarType === 'main' && validatedArgs.program_tag === 'BACK_NECK' ? 'backneck' : calendarType;
+      return await this.ghlConnector.rescheduleAppointment(id, validatedArgs, ghlMetadata, callId, this.stateStorage, effectiveType);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        Logger.error('Invalid reschedule_appointment arguments', { id, errors: error.issues });
         return {
           id,
           ok: false,

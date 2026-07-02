@@ -211,6 +211,21 @@ export const ScheduleAppointmentArgsSchema = z.object({
     notes: z.string().optional().default(''),
     program_tag: z.enum(['NEUROPATHY', 'BACK_NECK']).optional(),
 });
+export const RescheduleAppointmentArgsSchema = z.object({
+    // The contact is resolved (in priority order) from appointmentId's event,
+    // contactId, webhook metadata, or a phone search. The AI usually only knows
+    // the phone / contactId — it does not know the GHL event id.
+    contactId: z.string().optional(),
+    phone: z.string().optional(),
+    // Optional: if the AI already has the GHL event id it can skip auto-lookup.
+    appointmentId: z.string().optional(),
+    newStartTime: z.string().min(1),
+    newEndTime: z.string().min(1),
+    notes: z.string().optional(),
+    program_tag: z.enum(['NEUROPATHY', 'BACK_NECK']).optional(),
+}).refine(data => data.contactId || data.phone || data.appointmentId, {
+    message: "Either contactId, phone, or appointmentId must be provided",
+});
 export const LookupCallerArgsSchema = z.object({
     phone: z.string().min(1),
 });

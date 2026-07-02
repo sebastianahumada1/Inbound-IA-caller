@@ -1329,4 +1329,222 @@ export class GHLConnector {
             };
         }
     }
+    /**
+     * Reconcile an AI-provided ISO start time against GHL's canonical free slots.
+     *
+     * The LLM frequently re-emits a slot we returned (e.g. in "-06:00") using the
+     * caller's local offset (e.g. "-04:00") — a different UTC instant but the same
+     * wall clock. GHL then rejects it as "no longer available". We recover the
+     * canonical ISO by matching on the local wall-clock (YYYY-MM-DDTHH:MM). Falls
+     * back to the AI value (with an EST offset if none is present) when no match.
+     */
+    async reconcileSlot(id, calendarId, ghlApiKey, requestedStartIso) {
+        let selectedSlot = requestedStartIso;
+        try {
+            const startMs = new Date(requestedStartIso).getTime();
+            if (!Number.isNaN(startMs)) {
+                const dayStartMs = startMs - 24 * 60 * 60000;
+                const dayEndMs = startMs + 24 * 60 * 60000;
+                const slotsResp = await this.httpClient.get(`https://services.leadconnectorhq.com/calendars/${calendarId}/free-slots?startDate=${dayStartMs}&endDate=${dayEndMs}`, {
+                    headers: {
+                        'Authorization': `Bearer ${ghlApiKey}`,
+                        'Content-Type': 'application/json',
+                        'Version': '2021-07-28',
+                    },
+                });
+                if (slotsResp.ok && slotsResp.data && typeof slotsResp.data === 'object') {
+                    const flatSlots = [];
+                    for (const v of Object.values(slotsResp.data)) {
+                        if (v && Array.isArray(v.slots)) {
+                            flatSlots.push(...v.slots);
+                        }
+                    }
+                    const requestedWallClock = requestedStartIso.slice(0, 16);
+                    const match = flatSlots.find(s => s.slice(0, 16) === requestedWallClock);
+                    if (match) {
+                        Logger.info('[CALENDAR] Reconciled slot via wall-clock match', { id, requested: requestedStartIso, resolved: match });
+                        selectedSlot = match;
+                    }
+                    else {
+                        Logger.warn('[CALENDAR] No wall-clock match; using AI value as-is', {
+                            id,
+                            requested: requestedStartIso,
+                            flatSlotsCount: flatSlots.length,
+                            sampleSlots: flatSlots.slice(0, 5),
+                        });
+                    }
+                }
+            }
+        }
+        catch (err) {
+            Logger.warn('[CALENDAR] Slot reconciliation failed; using AI value as-is', {
+                id,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
+        // Fallback: if the slot still has no offset at all, assume EST.
+        if (!/[+-]\d{2}:\d{2}$/.test(selectedSlot)) {
+            const date = new Date(selectedSlot);
+            if (!Number.isNaN(date.getTime())) {
+                selectedSlot = date.toISOString().replace('Z', '-05:00');
+            }
+        }
+        return selectedSlot;
+    }
+    /**
+     * Reschedule an existing, active appointment to a new time slot.
+     *
+     * Flow: resolve the contact (from args / metadata / phone search) → find the
+     * contact's next active appointment on the target calendar (unless the AI
+     * passed an explicit appointmentId) → reconcile the new slot against GHL's
+     * free-slots → PUT the event in place so the same appointmentId and history
+     * are preserved.
+     */
+    async rescheduleAppointment(id, args, ghlMetadata, _callId, _stateStorage, calendarType = 'main') {
+        try {
+            Logger.info('[RESCHEDULE] Processing reschedule_appointment', {
+                id,
+                args: { ...args, phone: args.phone ? '***' + args.phone.slice(-4) : undefined },
+                calendarType,
+                hasGhlMetadata: !!ghlMetadata,
+            });
+            const ghlApiKey = this.getGHLApiKey();
+            if (!ghlApiKey) {
+                const error = 'GHL_API_KEY not configured for this client';
+                Logger.error('[RESCHEDULE] ' + error, { id, assistantId: this.assistantId });
+                return { id, ok: false, error };
+            }
+            const calendarId = this.getCalendarId(calendarType);
+            if (!calendarId) {
+                const error = 'Calendar ID not configured for this client';
+                Logger.error('[RESCHEDULE] ' + error, { id, assistantId: this.assistantId, calendarType });
+                return { id, ok: false, error };
+            }
+            // Validate the new time range up front.
+            const newStart = new Date(args.newStartTime);
+            const newEnd = new Date(args.newEndTime);
+            if (isNaN(newStart.getTime()) || isNaN(newEnd.getTime())) {
+                const error = 'Invalid date format for newStartTime or newEndTime';
+                Logger.error('[RESCHEDULE] ' + error, { id, newStartTime: args.newStartTime, newEndTime: args.newEndTime });
+                return { id, ok: false, error };
+            }
+            if (newEnd <= newStart) {
+                const error = 'newEndTime must be after newStartTime';
+                Logger.error('[RESCHEDULE] ' + error, { id, args });
+                return { id, ok: false, error };
+            }
+            // ── Resolve contactId ────────────────────────────────────────────
+            // Priority: explicit arg > webhook metadata > phone search.
+            let contactId = args.contactId || ghlMetadata?.contactId || ghlMetadata?.contact?.id;
+            if (!contactId) {
+                const rawPhone = args.phone || ghlMetadata?.contact?.phone || ghlMetadata?.contact?.phoneNumber;
+                if (rawPhone) {
+                    const found = await this.lookupContactByPhone(rawPhone.replace(/[\s\-\(\)\.]/g, '').trim());
+                    if (found) {
+                        contactId = found.contactId;
+                        Logger.info('[RESCHEDULE] Resolved contactId by phone', { id, contactId });
+                    }
+                }
+            }
+            // ── Resolve the appointment/event to move ────────────────────────
+            let eventId = args.appointmentId;
+            if (!eventId) {
+                if (!contactId) {
+                    const error = 'Could not identify the contact to reschedule. Provide a contactId, a phone number, or an appointmentId.';
+                    Logger.error('[RESCHEDULE] ' + error, { id });
+                    return { id, ok: false, error };
+                }
+                const apptResp = await this.httpClient.get(`https://services.leadconnectorhq.com/contacts/${contactId}/appointments`, {
+                    headers: {
+                        'Authorization': `Bearer ${ghlApiKey}`,
+                        'Content-Type': 'application/json',
+                        'Version': '2021-07-28',
+                    },
+                });
+                if (!apptResp.ok) {
+                    const error = `Could not fetch existing appointments: ${apptResp.status} ${apptResp.statusText}`;
+                    Logger.error('[RESCHEDULE] ' + error, { id, contactId, responseData: apptResp.data });
+                    return { id, ok: false, error };
+                }
+                const events = apptResp.data?.events || apptResp.data?.appointments || [];
+                const now = Date.now();
+                const cancelledStatuses = new Set(['cancelled', 'canceled', 'noshow', 'no-show', 'invalid']);
+                // Only consider active, future appointments on the target calendar,
+                // then pick the soonest one — that is the booking the caller means.
+                const candidates = events
+                    .filter(ev => (ev.calendarId ? ev.calendarId === calendarId : true))
+                    .filter(ev => !cancelledStatuses.has(String(ev.appointmentStatus || ev.status || '').toLowerCase()))
+                    .map(ev => ({ ev, startMs: new Date(ev.startTime).getTime() }))
+                    .filter(({ startMs }) => !Number.isNaN(startMs) && startMs >= now)
+                    .sort((a, b) => a.startMs - b.startMs);
+                Logger.info('[RESCHEDULE] Appointment lookup', {
+                    id,
+                    contactId,
+                    totalEvents: events.length,
+                    candidates: candidates.length,
+                });
+                if (candidates.length === 0) {
+                    const error = 'No active upcoming appointment was found for this contact to reschedule.';
+                    Logger.warn('[RESCHEDULE] ' + error, { id, contactId });
+                    return { id, ok: false, error };
+                }
+                const selected = candidates[0].ev;
+                eventId = selected.id;
+                Logger.info('[RESCHEDULE] Selected appointment to move', {
+                    id,
+                    eventId,
+                    currentStart: selected.startTime,
+                });
+            }
+            if (!eventId) {
+                const error = 'Appointment ID could not be determined.';
+                Logger.error('[RESCHEDULE] ' + error, { id });
+                return { id, ok: false, error };
+            }
+            // ── Reconcile the new slot and update the event in place ─────────
+            const selectedSlot = await this.reconcileSlot(id, calendarId, ghlApiKey, args.newStartTime);
+            // Derive endTime from the reconciled start so it carries the calendar's
+            // own offset and preserves the original duration the caller asked for.
+            const durationMs = newEnd.getTime() - newStart.getTime();
+            const endSlot = new Date(new Date(selectedSlot).getTime() + durationMs).toISOString();
+            const payload = {
+                calendarId,
+                startTime: selectedSlot,
+                endTime: endSlot,
+            };
+            if (args.notes)
+                payload.notes = args.notes;
+            Logger.info('[RESCHEDULE] Updating appointment in GHL', { id, eventId, calendarId, selectedSlot, endSlot });
+            const response = await this.httpClient.put(`https://services.leadconnectorhq.com/calendars/events/appointments/${eventId}`, payload, {
+                headers: {
+                    'Authorization': `Bearer ${ghlApiKey}`,
+                    'Content-Type': 'application/json',
+                    'Version': '2021-07-28',
+                },
+            });
+            if (response.ok) {
+                Logger.info('[RESCHEDULE] Appointment rescheduled successfully', { id, eventId, responseData: response.data });
+                return {
+                    id,
+                    ok: true,
+                    data: {
+                        appointmentId: eventId,
+                        calendarId,
+                        newStartTime: selectedSlot,
+                        newEndTime: endSlot,
+                        message: 'Appointment rescheduled successfully',
+                    },
+                };
+            }
+            const errorDetails = response.data ? JSON.stringify(response.data) : 'No error details';
+            const error = `GHL Calendar API failed: ${response.status} ${response.statusText}`;
+            Logger.error('[RESCHEDULE] ' + error, { id, eventId, calendarId, payload, responseData: response.data });
+            return { id, ok: false, error: `${error}. Details: ${errorDetails}` };
+        }
+        catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[RESCHEDULE] Error in reschedule_appointment', { id, error: errorMessage });
+            return { id, ok: false, error: errorMessage };
+        }
+    }
 }
