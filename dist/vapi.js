@@ -5,7 +5,7 @@ import { VapiApiClient } from './utils/vapi-client.js';
 import { SlackService } from './utils/slack-service.js';
 import { StateStorage } from './utils/state-storage.js';
 import { ClientConfigManager } from './utils/client-config.js';
-import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, RescheduleAppointmentArgsSchema, LookupCallerArgsSchema, SearchContactArgsSchema, DdpCheckContactArgsSchema, DdpCreateContactArgsSchema, DdpMarkTransferredArgsSchema, DdpMarkTransferredSupportArgsSchema, SendTextGuideArgsSchema, CheckContactArgsSchema, CreateContactArgsSchema, } from './schemas.js';
+import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, RescheduleAppointmentArgsSchema, LookupCallerArgsSchema, SearchContactArgsSchema, DdpCheckContactArgsSchema, DdpCreateContactArgsSchema, DdpMarkTransferredArgsSchema, DdpMarkTransferredSupportArgsSchema, SendTextGuideArgsSchema, SendTextLinkArgsSchema, CheckContactArgsSchema, CreateContactArgsSchema, } from './schemas.js';
 import { hotProspectorSearchByPhone } from './lib/hotProspector.js';
 // Live human-agent presence lives in ai-call-xi. This server only READS it —
 // agents sign in at https://ai-call-xi.vercel.app/caller-status.
@@ -282,6 +282,9 @@ export class VapiWebhookHandler {
                     return await this.handleDdpMarkTransferredSupport(id, args, callId, assistantId);
                 case 'send_text_guide':
                     return await this.handleSendTextGuide(id, args, callId, assistantId);
+                case 'send_text_link':
+                case 'send_text_link_inbound':
+                    return await this.handleSendTextLink(id, args, callId, assistantId, customerPhone);
                 case 'check_agent_availability':
                 case 'check_agent_availability_inbound':
                     return await this.handleCheckAgentAvailability(id, callId);
@@ -1183,6 +1186,79 @@ export class VapiWebhookHandler {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             Logger.error('[SEND_TEXT_GUIDE] Error', { id, callId, error: msg });
             return { id, ok: false, error: `Send text guide failed: ${msg}` };
+        }
+    }
+    /**
+     * Send an SMS with the client's configured link via the GHL Conversations API.
+     * Self-contained: the URL and lead-in text come from this server's client
+     * config, so nothing is fetched from the outbound server.
+     */
+    async handleSendTextLink(id, args, callId, assistantId, customerPhone) {
+        try {
+            const validatedArgs = SendTextLinkArgsSchema.parse(args);
+            const apiKey = (assistantId && ClientConfigManager.getGHLApiKey(assistantId)) || process.env.GHL_API_KEY;
+            if (!apiKey) {
+                Logger.error('[SEND_TEXT_LINK] Missing credentials', { callId, assistantId });
+                return { id, ok: false, error: 'GHL credentials not configured' };
+            }
+            const { url, message } = assistantId
+                ? ClientConfigManager.getSmsLink(assistantId, validatedArgs.linkKey)
+                : {};
+            if (!url) {
+                Logger.error('[SEND_TEXT_LINK] No link URL configured', { callId, assistantId, linkKey: validatedArgs.linkKey });
+                return { id, ok: false, error: 'SMS_LINK_NOT_CONFIGURED' };
+            }
+            // Resolve the contact: explicit args first, then the call's own metadata,
+            // then the number the caller phoned in from.
+            let contactId = validatedArgs.contactId;
+            if (!contactId && validatedArgs.phone) {
+                contactId = (await this.ghlConnector.lookupContactByPhone(validatedArgs.phone))?.contactId;
+            }
+            if (!contactId && callId) {
+                const metadata = await this.stateStorage.getCallMetadata(callId);
+                contactId = metadata?.contactId;
+            }
+            if (!contactId && customerPhone) {
+                contactId = (await this.ghlConnector.lookupContactByPhone(customerPhone))?.contactId;
+            }
+            if (!contactId) {
+                Logger.error('[SEND_TEXT_LINK] Could not resolve contact', { callId, hasPhoneArg: !!validatedArgs.phone });
+                return { id, ok: false, error: 'Could not resolve the contact. Provide contactId or phone.' };
+            }
+            const body = message ? `${message} ${url}` : url;
+            Logger.info('[SEND_TEXT_LINK] Sending link SMS', { callId, contactId, linkKey: validatedArgs.linkKey || 'DEFAULT' });
+            const resp = await fetch('https://services.leadconnectorhq.com/conversations/messages', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Version': '2021-04-15',
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ type: 'SMS', contactId, message: body }),
+            });
+            const data = await resp.json();
+            if (!resp.ok) {
+                Logger.error('[SEND_TEXT_LINK] GHL API error', { callId, status: resp.status, data });
+                return { id, ok: false, error: `GHL error: ${JSON.stringify(data)}` };
+            }
+            Logger.info('[SEND_TEXT_LINK] Link SMS sent', { callId, contactId, messageId: data?.messageId || data?.id });
+            return {
+                id,
+                ok: true,
+                data: {
+                    contactId,
+                    messageId: data?.messageId || data?.id,
+                    message: 'Text message with link sent successfully',
+                },
+            };
+        }
+        catch (error) {
+            if (error instanceof ZodError) {
+                return { id, ok: false, error: `Invalid arguments: ${error.issues.map(i => i.message).join(', ')}` };
+            }
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[SEND_TEXT_LINK] Error', { id, callId, error: msg });
+            return { id, ok: false, error: `Send text link failed: ${msg}` };
         }
     }
     /**

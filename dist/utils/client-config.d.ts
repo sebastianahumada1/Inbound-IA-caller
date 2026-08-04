@@ -13,6 +13,8 @@ export interface ClientConfig {
     backNeckGuideWorkflowId?: string;
     locationId?: string;
     slackChannelId?: string;
+    smsLinkUrls?: Record<string, string>;
+    smsLinkMessages?: Record<string, string>;
 }
 /**
  * Client Configuration Manager
@@ -36,6 +38,14 @@ export declare class ClientConfigManager {
      * Get client name by Assistant ID
      */
     static getClientName(assistantId: string): string;
+    /**
+     * Get the send_text_link URL and lead-in message for a client.
+     * Omit linkKey for the client's default link.
+     */
+    static getSmsLink(assistantId: string, linkKey?: string): {
+        url?: string | undefined;
+        message?: string | undefined;
+    };
     /**
      * Get Calendar ID by Assistant ID
      */

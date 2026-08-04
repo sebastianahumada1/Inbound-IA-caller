@@ -1813,6 +1813,19 @@ export declare const SendTextGuideArgsSchema: z.ZodObject<{
     contactId?: string | undefined;
     guide_type?: string | undefined;
 }>;
+export declare const SendTextLinkArgsSchema: z.ZodObject<{
+    linkKey: z.ZodOptional<z.ZodString>;
+    contactId: z.ZodOptional<z.ZodString>;
+    phone: z.ZodOptional<z.ZodString>;
+}, "strip", z.ZodTypeAny, {
+    phone?: string | undefined;
+    contactId?: string | undefined;
+    linkKey?: string | undefined;
+}, {
+    phone?: string | undefined;
+    contactId?: string | undefined;
+    linkKey?: string | undefined;
+}>;
 export declare const ToolResultSchema: z.ZodObject<{
     id: z.ZodString;
     ok: z.ZodBoolean;
@@ -1886,5 +1899,6 @@ export type CreateContactArgs = z.infer<typeof CreateContactArgsSchema>;
 export type DdpMarkTransferredArgs = z.infer<typeof DdpMarkTransferredArgsSchema>;
 export type DdpMarkTransferredSupportArgs = z.infer<typeof DdpMarkTransferredSupportArgsSchema>;
 export type SendTextGuideArgs = z.infer<typeof SendTextGuideArgsSchema>;
+export type SendTextLinkArgs = z.infer<typeof SendTextLinkArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;

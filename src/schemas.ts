@@ -307,6 +307,14 @@ export const SendTextGuideArgsSchema = z.object({
   guide_type: z.string().optional(), // informational; program is resolved by assistant
 });
 
+// All fields optional: the backend resolves the contact from call metadata and
+// the link URL/message from the client config.
+export const SendTextLinkArgsSchema = z.object({
+  linkKey: z.string().optional(),
+  contactId: z.string().optional(),
+  phone: z.string().optional(),
+});
+
 // Response schemas
 export const ToolResultSchema = z.object({
   id: z.string(),
@@ -341,6 +349,7 @@ export type CreateContactArgs = z.infer<typeof CreateContactArgsSchema>;
 export type DdpMarkTransferredArgs = z.infer<typeof DdpMarkTransferredArgsSchema>;
 export type DdpMarkTransferredSupportArgs = z.infer<typeof DdpMarkTransferredSupportArgsSchema>;
 export type SendTextGuideArgs = z.infer<typeof SendTextGuideArgsSchema>;
+export type SendTextLinkArgs = z.infer<typeof SendTextLinkArgsSchema>;
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 export type WebhookResponse = z.infer<typeof WebhookResponseSchema>;
 

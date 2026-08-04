@@ -28,6 +28,12 @@ export declare class VapiWebhookHandler {
     private handleDdpMarkTransferredSupport;
     private handleSendTextGuide;
     /**
+     * Send an SMS with the client's configured link via the GHL Conversations API.
+     * Self-contained: the URL and lead-in text come from this server's client
+     * config, so nothing is fetched from the outbound server.
+     */
+    private handleSendTextLink;
+    /**
      * Read live human-agent presence from ai-call-xi. `available` already has the
      * 75s staleness rule applied there — never recompute it here.
      */

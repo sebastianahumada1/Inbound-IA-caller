@@ -1,0 +1,32 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "send_text_link_inbound",
+      "description": "Sends an SMS text message with a link to the lead's phone (via GoHighLevel). Use it when the lead agrees to receive a link — e.g. the refundable-deposit payment link, or a registration/booking link. The link URL and lead-in text are fixed per client on the backend; you normally don't pass any arguments (the backend resolves the contact from the call metadata and the caller's number). Only pass 'vip' as linkKey when you specifically want to send the VIP variant. Never read the URL aloud, and never tell the caller a text was sent unless this tool returned success.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "linkKey": {
+            "description": "Variante del link a enviar (opcional). Omítelo para enviar el link por defecto del cliente. Usa 'vip' para enviar el link VIP (por ejemplo, a un lead ya registrado al que quieres invitar al upgrade VIP).",
+            "type": "string",
+            "enum": ["vip"]
+          },
+          "contactId": {
+            "description": "ID del contacto en GHL si está disponible (opcional). Normalmente no es necesario: el backend lo resuelve desde la metadata de la llamada.",
+            "type": "string"
+          },
+          "phone": {
+            "description": "Número de teléfono del lead (opcional). Solo úsalo si el contactId no está disponible; normalmente el backend lo resuelve desde la metadata de la llamada.",
+            "type": "string"
+          }
+        },
+        "required": []
+      }
+    },
+    "server": {
+      "url": "https://inbound-ia-caller.vercel.app/vapi/webhook?token=REPLACE_WITH_WEBHOOK_TOKEN",
+      "timeoutSeconds": 20
+    }
+  }
+]

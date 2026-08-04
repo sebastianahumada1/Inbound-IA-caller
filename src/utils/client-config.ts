@@ -19,6 +19,9 @@ export interface ClientConfig {
   backNeckGuideWorkflowId?: string;
   locationId?: string;
   slackChannelId?: string;
+  // send_text_link: link variants keyed by uppercase linkKey ('DEFAULT', 'VIP', ...)
+  smsLinkUrls?: Record<string, string>;
+  smsLinkMessages?: Record<string, string>;
 }
 
 /**
@@ -119,6 +122,7 @@ export class ClientConfigManager {
         assistantIdVar: 'MIAMI_VALLEY_ASSISTANT_ID',
         apiKeyVar: 'MIAMI_VALLEY_GHL_API_KEY',
         calendarIdVar: 'MIAMI_VALLEY_CALENDAR_ID',
+        calendarIdCallbackVar: 'MIAMI_VALLEY_CALLBACK_CALENDAR_ID',
         locationIdVar: 'MIAMI_VALLEY_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_MIAMI_VALLEY',
       },
@@ -262,6 +266,24 @@ export class ClientConfigManager {
         }
       }
 
+      // Add optional send_text_link variants. Rather than declaring a var per
+      // client, derive the client's env prefix and pick up every
+      // <PREFIX>_SMS_LINK[_<KEY>]_URL / _MESSAGE pair — same naming the
+      // outbound server uses, so the identical env vars work here.
+      const smsPrefix = clientDef.assistantIdVar.replace(/_ASSISTANT_ID$/, '');
+      const smsLinkPattern = new RegExp(`^${smsPrefix}_SMS_LINK_(?:(.+)_)?(URL|MESSAGE)$`);
+      for (const [envKey, envValue] of Object.entries(process.env)) {
+        if (!envValue) continue;
+        const match = smsLinkPattern.exec(envKey);
+        if (!match) continue;
+        const linkKey = (match[1] || 'DEFAULT').toUpperCase();
+        if (match[2] === 'URL') {
+          config.smsLinkUrls = { ...config.smsLinkUrls, [linkKey]: envValue };
+        } else {
+          config.smsLinkMessages = { ...config.smsLinkMessages, [linkKey]: envValue };
+        }
+      }
+
       // Add optional Slack channel if configured
       const slackChannel = process.env[clientDef.slackChannelVar];
       if (slackChannel) {
@@ -305,7 +327,13 @@ export class ClientConfigManager {
         if (premierConfig.slackChannelId) {
           aliasConfig.slackChannelId = premierConfig.slackChannelId;
         }
-        
+        if (premierConfig.smsLinkUrls) {
+          aliasConfig.smsLinkUrls = premierConfig.smsLinkUrls;
+        }
+        if (premierConfig.smsLinkMessages) {
+          aliasConfig.smsLinkMessages = premierConfig.smsLinkMessages;
+        }
+
         this.configs.set(premierWellnessBackNeckAssistantId, aliasConfig);
         configuredClients.push('Premier Wellness Back Neck (alias)');
         
@@ -337,6 +365,8 @@ export class ClientConfigManager {
         if (premierConfig.calendarId) inboundConfig.calendarId = premierConfig.calendarId;
         if (premierConfig.locationId) inboundConfig.locationId = premierConfig.locationId;
         if (premierConfig.slackChannelId) inboundConfig.slackChannelId = premierConfig.slackChannelId;
+        if (premierConfig.smsLinkUrls) inboundConfig.smsLinkUrls = premierConfig.smsLinkUrls;
+        if (premierConfig.smsLinkMessages) inboundConfig.smsLinkMessages = premierConfig.smsLinkMessages;
 
         this.configs.set(inboundDefaultAssistantId, inboundConfig);
         configuredClients.push('Premier Inbound Neuro (alias)');
@@ -364,8 +394,11 @@ export class ClientConfigManager {
           ghlApiKey: miamiValleyConfig.ghlApiKey,
         };
         if (miamiValleyConfig.calendarId) miamiValleyBackInboundConfig.calendarId = miamiValleyConfig.calendarId;
+        if (miamiValleyConfig.callbackCalendarId) miamiValleyBackInboundConfig.callbackCalendarId = miamiValleyConfig.callbackCalendarId;
         if (miamiValleyConfig.locationId) miamiValleyBackInboundConfig.locationId = miamiValleyConfig.locationId;
         if (miamiValleyConfig.slackChannelId) miamiValleyBackInboundConfig.slackChannelId = miamiValleyConfig.slackChannelId;
+        if (miamiValleyConfig.smsLinkUrls) miamiValleyBackInboundConfig.smsLinkUrls = miamiValleyConfig.smsLinkUrls;
+        if (miamiValleyConfig.smsLinkMessages) miamiValleyBackInboundConfig.smsLinkMessages = miamiValleyConfig.smsLinkMessages;
 
         this.configs.set(miamiValleyBackInboundAssistantId, miamiValleyBackInboundConfig);
         configuredClients.push('Miami Valley Back Inbound (alias)');
@@ -431,6 +464,21 @@ export class ClientConfigManager {
   static getClientName(assistantId: string): string {
     const config = this.getConfigByAssistantId(assistantId);
     return config?.name || 'Unknown Client';
+  }
+
+  /**
+   * Get the send_text_link URL and lead-in message for a client.
+   * Omit linkKey for the client's default link.
+   */
+  static getSmsLink(assistantId: string, linkKey?: string): { url?: string | undefined; message?: string | undefined } {
+    const config = this.getConfigByAssistantId(assistantId);
+    if (!config) return {};
+
+    const key = (linkKey || 'DEFAULT').toUpperCase();
+    return {
+      url: config.smsLinkUrls?.[key],
+      message: config.smsLinkMessages?.[key],
+    };
   }
 
   /**
