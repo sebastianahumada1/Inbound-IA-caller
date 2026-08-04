@@ -1363,7 +1363,8 @@ export class VapiWebhookHandler {
                     type: 'number',
                     number: target.phone,
                     // Spoken to the CALLER right before connecting — never name the agent.
-                    message: 'Thank you for holding — I am connecting you with a team member now. One moment please.',
+                    // Inbound wording: they just dialed, nobody was on hold.
+                    message: 'One moment please, connecting you now.',
                     transferPlan: {
                         mode: 'warm-transfer-with-message',
                         // Spoken to the HUMAN AGENT receiving the call (inbound wording).
@@ -1566,7 +1567,9 @@ export class VapiWebhookHandler {
                         }
                     }
                 }
-                await this.uploadRecordingToSlack(recordingUrl, message.call.id, assistantId, ghlMetadata, fullCallData, {
+                // Post our own proxy link, never the raw R2 URL from the webhook —
+                // that one is private and answers with an authorization error.
+                await this.uploadRecordingToSlack(this.buildRecordingLink(message.call.id), message.call.id, assistantId, ghlMetadata, fullCallData, {
                     duration: message.duration,
                     cost: message.cost,
                     ...(callSummary !== undefined && { summary: callSummary }),
@@ -2066,6 +2069,23 @@ export class VapiWebhookHandler {
                 error: error instanceof Error ? error.message : 'Unknown error',
             });
         }
+    }
+    /**
+     * Stable link to a call recording, served by this server's /recording proxy.
+     * Returns null when no public base URL is known — in that case we post no
+     * link at all rather than falling back to the unreadable R2 URL.
+     *
+     * VERCEL_URL is deployment-specific and changes on every deploy, so
+     * PUBLIC_BASE_URL should be set explicitly for links that keep working.
+     */
+    buildRecordingLink(callId) {
+        const explicit = process.env.PUBLIC_BASE_URL?.replace(/\/+$/, '');
+        const base = explicit || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+        if (!base) {
+            Logger.warn('[RECORDING] No public base URL configured, cannot build recording link', { callId });
+            return null;
+        }
+        return `${base}/recording/${callId}?type=mono`;
     }
     /**
      * Uploads a recording to Slack with context information

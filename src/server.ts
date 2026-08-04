@@ -683,6 +683,43 @@ app.get('/', async (_req, res) => {
   res.status(200).send(html);
 });
 
+// Stable proxy for call recordings.
+//
+// Vapi recordings live in a private HIPAA R2 bucket, so the recordingUrl from
+// the webhook is not publicly readable. This route resolves a fresh signed URL
+// from Vapi on every click and redirects to it, which keeps the link we post to
+// Slack stable and non-expiring. The callId (an unguessable UUID) is the
+// capability — the raw R2 URL is never exposed.
+app.get('/recording/:callId', async (req, res) => {
+  const { callId } = req.params;
+  const allowedTypes = ['mono', 'stereo', 'customer', 'assistant'];
+  const requestedType = String(req.query.type || '');
+  const type = allowedTypes.includes(requestedType) ? requestedType : 'mono';
+
+  if (!callId) {
+    res.status(400).json({ ok: false, message: 'callId is required' });
+    return;
+  }
+
+  try {
+    const { VapiApiClient } = await import('./utils/vapi-client.js');
+    const signedUrl = await new VapiApiClient().getRecordingSignedUrl(callId, type);
+
+    Logger.info('[RECORDING] Redirecting to signed recording URL', { callId, type });
+    res.redirect(302, signedUrl);
+  } catch (error) {
+    Logger.error('[RECORDING] Could not resolve recording', {
+      callId,
+      type,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(502).json({
+      ok: false,
+      message: 'Could not retrieve the call recording. It may still be processing, or the call id is invalid.',
+    });
+  }
+});
+
 // Health check endpoint
 app.get('/health', (_req, res) => {
   const storageStatus = vapiHandler.getStorageStatus();

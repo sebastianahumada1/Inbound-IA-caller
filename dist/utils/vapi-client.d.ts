@@ -25,6 +25,16 @@ export declare class VapiApiClient {
         isVercel: boolean;
     };
     getCall(callId: string): Promise<any>;
+    /**
+     * Resolve a short-lived signed URL for a call recording.
+     *
+     * Recordings live in a private HIPAA R2 bucket, so the recordingUrl that
+     * arrives in the webhook is NOT publicly readable — opening it raw returns an
+     * authorization error. Vapi's recording endpoint answers with a 302 whose
+     * Location header is the signed URL, so the redirect must NOT be followed:
+     * following it would download the audio and lose the Location.
+     */
+    getRecordingSignedUrl(callId: string, type?: string): Promise<string>;
     getCallMetadata(callId: string): Promise<any>;
 }
 export {};

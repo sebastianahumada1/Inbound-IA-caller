@@ -59,6 +59,15 @@ export declare class VapiWebhookHandler {
     scheduleMetadataPull(callId: string, delays?: number[]): Promise<void>;
     private sendFinalSummaryNote;
     /**
+     * Stable link to a call recording, served by this server's /recording proxy.
+     * Returns null when no public base URL is known — in that case we post no
+     * link at all rather than falling back to the unreadable R2 URL.
+     *
+     * VERCEL_URL is deployment-specific and changes on every deploy, so
+     * PUBLIC_BASE_URL should be set explicitly for links that keep working.
+     */
+    private buildRecordingLink;
+    /**
      * Uploads a recording to Slack with context information
      */
     private uploadRecordingToSlack;

@@ -222,6 +222,30 @@ export class VapiApiClient {
             throw new Error(`Failed to get call: ${diagnostic.type} - ${diagnostic.description}`);
         }
     }
+    /**
+     * Resolve a short-lived signed URL for a call recording.
+     *
+     * Recordings live in a private HIPAA R2 bucket, so the recordingUrl that
+     * arrives in the webhook is NOT publicly readable — opening it raw returns an
+     * authorization error. Vapi's recording endpoint answers with a 302 whose
+     * Location header is the signed URL, so the redirect must NOT be followed:
+     * following it would download the audio and lose the Location.
+     */
+    async getRecordingSignedUrl(callId, type = 'mono') {
+        if (!this.isConfigValid) {
+            throw new Error('Vapi client not properly configured. Check VAPI_API_KEY and VAPI_API_BASE_URL.');
+        }
+        const response = await this.client.get(`/call/${callId}/${type}-recording`, {
+            maxRedirects: 0,
+            validateStatus: (status) => status >= 200 && status < 400,
+        });
+        const location = response.headers?.location || response.headers?.Location;
+        if (!location) {
+            throw new Error(`Vapi recording endpoint returned no redirect Location (status ${response.status})`);
+        }
+        Logger.info('[VAPI_CLIENT] Resolved signed recording URL', { callId, type });
+        return location;
+    }
     async getCallMetadata(callId) {
         try {
             Logger.info('[VAPI_CLIENT] Fetching call metadata specifically', { callId });

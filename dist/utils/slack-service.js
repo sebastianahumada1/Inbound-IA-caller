@@ -201,7 +201,9 @@ export class SlackService {
                 message += `*Summary:* ${context.summary}\n`;
             }
             message += `*Date:* ${formattedDate}\n`;
-            message += `*Call recording:* ${recordingUrl}`;
+            message += recordingUrl
+                ? `*Call recording:* ${recordingUrl}`
+                : '*Call recording:* link unavailable (PUBLIC_BASE_URL not configured)';
             // Use client-specific channel if configured, otherwise fall back to default
             const clientChannelId = assistantId
                 ? ClientConfigManager.getSlackChannelId(assistantId) || this.defaultChannelId

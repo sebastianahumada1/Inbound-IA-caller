@@ -84,7 +84,7 @@ export class SlackService {
    * Sends recording link with context message (no file upload)
    */
   async uploadRecordingWithContext(
-    recordingUrl: string,
+    recordingUrl: string | null,
     callId: string,
     assistantId?: string,
     ghlMetadata?: any,
@@ -244,7 +244,9 @@ export class SlackService {
       }
       
       message += `*Date:* ${formattedDate}\n`;
-      message += `*Call recording:* ${recordingUrl}`;
+      message += recordingUrl
+        ? `*Call recording:* ${recordingUrl}`
+        : '*Call recording:* link unavailable (PUBLIC_BASE_URL not configured)';
 
       // Use client-specific channel if configured, otherwise fall back to default
       const clientChannelId = assistantId
