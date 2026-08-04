@@ -7,6 +7,11 @@ import { StateStorage } from './utils/state-storage.js';
 import { ClientConfigManager } from './utils/client-config.js';
 import { VapiWebhookBodySchema, SendSmsArgsSchema, UpsertContactArgsSchema, AddTagArgsSchema, AddNoteArgsSchema, UpdateStageArgsSchema, CheckCalendarAvailabilityArgsSchema, ScheduleAppointmentArgsSchema, RescheduleAppointmentArgsSchema, LookupCallerArgsSchema, SearchContactArgsSchema, DdpCheckContactArgsSchema, DdpCreateContactArgsSchema, DdpMarkTransferredArgsSchema, DdpMarkTransferredSupportArgsSchema, SendTextGuideArgsSchema, CheckContactArgsSchema, CreateContactArgsSchema, } from './schemas.js';
 import { hotProspectorSearchByPhone } from './lib/hotProspector.js';
+// Live human-agent presence lives in ai-call-xi. This server only READS it —
+// agents sign in at https://ai-call-xi.vercel.app/caller-status.
+const CALLER_STATUS_BASE = process.env.CALLER_STATUS_BASE_URL || 'https://ai-call-xi.vercel.app';
+// Generous enough to survive a cold start on ai-call-xi, well under Vapi's tool timeout.
+const CALLER_STATUS_TIMEOUT_MS = 8000;
 export class VapiWebhookHandler {
     ghlConnector;
     vapiApiClient;
@@ -158,6 +163,8 @@ export class VapiWebhookHandler {
                 return this.handleMetadata(message);
             case 'ghl_tool':
                 return await this.handleGhlTool(message);
+            case 'transfer-destination-request':
+                return await this.handleTransferDestinationRequest(message);
             case 'assistant.started':
                 Logger.info('[WEBHOOK] Assistant started', {
                     callId: message.call?.id,
@@ -275,6 +282,9 @@ export class VapiWebhookHandler {
                     return await this.handleDdpMarkTransferredSupport(id, args, callId, assistantId);
                 case 'send_text_guide':
                     return await this.handleSendTextGuide(id, args, callId, assistantId);
+                case 'check_agent_availability':
+                case 'check_agent_availability_inbound':
+                    return await this.handleCheckAgentAvailability(id, callId);
                 default:
                     Logger.warn('Unknown tool name', { id, name });
                     return {
@@ -1173,6 +1183,128 @@ export class VapiWebhookHandler {
             const msg = error instanceof Error ? error.message : 'Unknown error';
             Logger.error('[SEND_TEXT_GUIDE] Error', { id, callId, error: msg });
             return { id, ok: false, error: `Send text guide failed: ${msg}` };
+        }
+    }
+    /**
+     * Read live human-agent presence from ai-call-xi. `available` already has the
+     * 75s staleness rule applied there — never recompute it here.
+     */
+    async fetchLiveAgents() {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), CALLER_STATUS_TIMEOUT_MS);
+        try {
+            const resp = await fetch(`${CALLER_STATUS_BASE}/caller-status/agents`, {
+                signal: controller.signal,
+            });
+            if (!resp.ok) {
+                throw new Error(`caller-status responded ${resp.status}`);
+            }
+            const body = await resp.json();
+            return {
+                agents: body.agents || [],
+                available: body.available || [],
+            };
+        }
+        finally {
+            clearTimeout(timeoutId);
+        }
+    }
+    async handleCheckAgentAvailability(id, callId) {
+        try {
+            const { agents, available } = await this.fetchLiveAgents();
+            Logger.info('[AGENT_AVAILABILITY] Presence fetched', {
+                callId,
+                availableCount: available.length,
+                rosterCount: agents.length,
+            });
+            return {
+                id,
+                ok: true,
+                data: {
+                    anyAvailable: available.length > 0,
+                    availableCount: available.length,
+                    availableAgents: available.map((a) => ({
+                        name: a.name,
+                        transferNumber: a.phone || null,
+                    })),
+                    roster: agents.map((a) => ({
+                        name: a.name,
+                        status: a.status,
+                        online: !a.stale,
+                    })),
+                },
+            };
+        }
+        catch (error) {
+            // Never fail the call over presence: report "nobody available" so the
+            // assistant offers a callback instead of hitting a tool error.
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[AGENT_AVAILABILITY] Could not reach caller-status', { id, callId, error: msg });
+            return {
+                id,
+                ok: true,
+                data: {
+                    anyAvailable: false,
+                    availableCount: 0,
+                    availableAgents: [],
+                    roster: [],
+                    serviceReachable: false,
+                },
+            };
+        }
+    }
+    async handleTransferDestinationRequest(message) {
+        const callId = message?.call?.id;
+        const assistantId = message?.call?.assistantId ||
+            message?.assistant?.id ||
+            message?.call?.assistant?.id ||
+            message?.assistantId ||
+            undefined;
+        const clientName = assistantId ? ClientConfigManager.getClientName(assistantId) : '';
+        const practiceName = clientName && clientName !== 'Unknown Client' ? clientName : 'the practice';
+        try {
+            const { available } = await this.fetchLiveAgents();
+            // Only available agents WITH a phone number can actually receive the call
+            const target = available.find((a) => a.phone && a.phone.trim().length > 0);
+            if (!target) {
+                Logger.info('[TRANSFER_DESTINATION] No reachable agent available', {
+                    callId,
+                    assistantId,
+                    availableCount: available.length,
+                });
+                return {
+                    error: 'No live agents are available to take the call right now. Offer to schedule a callback instead.',
+                };
+            }
+            Logger.info('[TRANSFER_DESTINATION] Routing call to live agent', {
+                callId,
+                assistantId,
+                practiceName,
+                agentName: target.name,
+            });
+            return {
+                destination: {
+                    type: 'number',
+                    number: target.phone,
+                    // Spoken to the CALLER right before connecting — never name the agent.
+                    message: 'Thank you for holding — I am connecting you with a team member now. One moment please.',
+                    transferPlan: {
+                        mode: 'warm-transfer-with-message',
+                        // Spoken to the HUMAN AGENT receiving the call (inbound wording).
+                        message: `Heads up — you are receiving a live inbound call for ${practiceName}. ` +
+                            `The caller phoned in and asked to be connected with a team member. ` +
+                            `Please greet them warmly and ask how you can help today.`,
+                    },
+                },
+            };
+        }
+        catch (error) {
+            // Don't hang up on a presence failure: keep the caller with the assistant.
+            const msg = error instanceof Error ? error.message : 'Unknown error';
+            Logger.error('[TRANSFER_DESTINATION] Could not reach caller-status', { callId, assistantId, error: msg });
+            return {
+                error: 'Could not reach the availability service right now. Offer to schedule a callback instead.',
+            };
         }
     }
     /** Safely convert a value that might be a string or array to a readable string. */

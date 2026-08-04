@@ -27,6 +27,13 @@ export declare class VapiWebhookHandler {
     private handleDdpMarkTransferred;
     private handleDdpMarkTransferredSupport;
     private handleSendTextGuide;
+    /**
+     * Read live human-agent presence from ai-call-xi. `available` already has the
+     * 75s staleness rule applied there — never recompute it here.
+     */
+    private fetchLiveAgents;
+    private handleCheckAgentAvailability;
+    private handleTransferDestinationRequest;
     /** Safely convert a value that might be a string or array to a readable string. */
     private stringifyField;
     private handleCallEnded;

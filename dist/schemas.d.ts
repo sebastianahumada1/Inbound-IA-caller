@@ -420,6 +420,49 @@ export declare const VapiAssistantStartedMessageSchema: z.ZodObject<{
     customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
     assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
 }, z.ZodTypeAny, "passthrough">>;
+export declare const VapiTransferDestinationRequestMessageSchema: z.ZodObject<{
+    type: z.ZodLiteral<"transfer-destination-request">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+    type: z.ZodLiteral<"transfer-destination-request">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+    type: z.ZodLiteral<"transfer-destination-request">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, z.ZodTypeAny, "passthrough">>;
 export declare const VapiWebhookMessageSchema: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
     type: z.ZodLiteral<"tool-calls">;
     toolCallList: z.ZodArray<z.ZodEffects<z.ZodObject<{
@@ -786,6 +829,48 @@ export declare const VapiWebhookMessageSchema: z.ZodDiscriminatedUnion<"type", [
     phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
     customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
     assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, z.ZodTypeAny, "passthrough">>, z.ZodObject<{
+    type: z.ZodLiteral<"transfer-destination-request">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+    type: z.ZodLiteral<"transfer-destination-request">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+}, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+    type: z.ZodLiteral<"transfer-destination-request">;
+    call: z.ZodOptional<z.ZodObject<{
+        id: z.ZodString;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        id: z.ZodString;
+    }, z.ZodTypeAny, "passthrough">>>;
+    timestamp: z.ZodOptional<z.ZodNumber>;
+    assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
 }, z.ZodTypeAny, "passthrough">>]>;
 export declare const VapiWebhookBodySchema: z.ZodObject<{
     message: z.ZodDiscriminatedUnion<"type", [z.ZodObject<{
@@ -1154,6 +1239,48 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
         phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
         customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
         assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, z.ZodTypeAny, "passthrough">>, z.ZodObject<{
+        type: z.ZodLiteral<"transfer-destination-request">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+        type: z.ZodLiteral<"transfer-destination-request">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+        type: z.ZodLiteral<"transfer-destination-request">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
     }, z.ZodTypeAny, "passthrough">>]>;
 }, "strip", z.ZodTypeAny, {
     message: {
@@ -1245,6 +1372,20 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
         phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
         customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
         assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, z.ZodTypeAny, "passthrough"> | z.objectOutputType<{
+        type: z.ZodLiteral<"transfer-destination-request">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
     }, z.ZodTypeAny, "passthrough">;
 }, {
     message: {
@@ -1341,6 +1482,20 @@ export declare const VapiWebhookBodySchema: z.ZodObject<{
         phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
         customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
         assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+    }, z.ZodTypeAny, "passthrough"> | z.objectInputType<{
+        type: z.ZodLiteral<"transfer-destination-request">;
+        call: z.ZodOptional<z.ZodObject<{
+            id: z.ZodString;
+        }, "passthrough", z.ZodTypeAny, z.objectOutputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">, z.objectInputType<{
+            id: z.ZodString;
+        }, z.ZodTypeAny, "passthrough">>>;
+        timestamp: z.ZodOptional<z.ZodNumber>;
+        assistant: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        artifact: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        phoneNumber: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
+        customer: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodAny>>;
     }, z.ZodTypeAny, "passthrough">;
 }>;
 export declare const SendSmsArgsSchema: z.ZodObject<{

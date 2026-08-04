@@ -136,6 +136,18 @@ export const VapiAssistantStartedMessageSchema = z.object({
     customer: z.record(z.any()).optional(),
     assistant: z.record(z.any()).optional(),
 }).passthrough();
+// Vapi asks the server where to send a dynamic transferCall (empty destinations)
+export const VapiTransferDestinationRequestMessageSchema = z.object({
+    type: z.literal('transfer-destination-request'),
+    call: z.object({
+        id: z.string(),
+    }).passthrough().optional(),
+    timestamp: z.number().optional(),
+    assistant: z.record(z.any()).optional(),
+    artifact: z.record(z.any()).optional(),
+    phoneNumber: z.record(z.any()).optional(),
+    customer: z.record(z.any()).optional(),
+}).passthrough();
 export const VapiWebhookMessageSchema = z.discriminatedUnion('type', [
     VapiToolCallsMessageSchema,
     VapiCallEndedMessageSchema,
@@ -145,6 +157,7 @@ export const VapiWebhookMessageSchema = z.discriminatedUnion('type', [
     VapiMetadataMessageSchema,
     VapiGhlToolMessageSchema,
     VapiAssistantStartedMessageSchema,
+    VapiTransferDestinationRequestMessageSchema,
 ]);
 export const VapiWebhookBodySchema = z.object({
     message: VapiWebhookMessageSchema,

@@ -1,0 +1,17 @@
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "check_agent_availability_inbound",
+      "description": "Checks whether any live human agent from the call team is currently available to take a transferred call. Takes no parameters. Returns anyAvailable (true/false), availableCount, the list of available agents, and the full roster with each agent's status. Call it BEFORE offering to transfer the caller to a team member: if anyAvailable is false, do not attempt the transfer — offer to schedule a callback instead.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    "server": {
+      "url": "https://inbound-ia-caller.vercel.app/vapi/webhook?token=REPLACE_WITH_WEBHOOK_TOKEN",
+      "timeoutSeconds": 20
+    }
+  }
+]
