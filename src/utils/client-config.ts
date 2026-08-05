@@ -42,6 +42,7 @@ export class ClientConfigManager {
         assistantIdVar: 'PREMIER_WELLNESS_ASSISTANT_ID',
         apiKeyVar: 'PREMIER_WELLNESS_GHL_API_KEY',
         calendarIdVar: 'PREMIER_WELLNESS_CALENDAR_ID',
+        calendarIdCallbackVar: 'PREMIER_WELLNESS_CALLBACK_CALENDAR_ID',
         locationIdVar: 'PREMIER_WELLNESS_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_PREMIER_WELLNESS',
       },
@@ -50,6 +51,7 @@ export class ClientConfigManager {
         assistantIdVar: 'WEST_TEXAS_ASSISTANT_ID',
         apiKeyVar: 'WEST_TEXAS_GHL_API_KEY',
         calendarIdVar: 'WEST_TEXAS_CALENDAR_ID',
+        calendarIdCallbackVar: 'WEST_TEXAS_CALLBACK_CALENDAR_ID',
         locationIdVar: 'WEST_TEXAS_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS',
       },
@@ -58,6 +60,7 @@ export class ClientConfigManager {
         assistantIdVar: 'WEST_TEXAS_BACK_NECK_ASSISTANT_ID',
         apiKeyVar: 'WEST_TEXAS_BACK_NECK_GHL_API_KEY',
         calendarIdVar: 'WEST_TEXAS_BACK_NECK_CALENDAR_ID',
+        calendarIdCallbackVar: 'WEST_TEXAS_BACK_NECK_CALLBACK_CALENDAR_ID',
         locationIdVar: 'WEST_TEXAS_BACK_NECK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_WEST_TEXAS_BACK_NECK',
       },
@@ -66,6 +69,7 @@ export class ClientConfigManager {
         assistantIdVar: 'THIRD_CLIENT_ASSISTANT_ID',
         apiKeyVar: 'THIRD_CLIENT_GHL_API_KEY',
         calendarIdVar: 'THIRD_CLIENT_CALENDAR_ID',
+        calendarIdCallbackVar: 'THIRD_CLIENT_CALLBACK_CALENDAR_ID',
         locationIdVar: 'THIRD_CLIENT_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_THIRD_CLIENT',
       },
@@ -98,6 +102,7 @@ export class ClientConfigManager {
         assistantIdVar: 'JENNINGS_BACK_NECK_ASSISTANT_ID',
         apiKeyVar: 'JENNINGS_BACK_NECK_GHL_API_KEY',
         calendarIdVar: 'JENNINGS_BACK_NECK_CALENDAR_ID',
+        calendarIdCallbackVar: 'JENNINGS_BACK_NECK_CALLBACK_CALENDAR_ID',
         locationIdVar: 'JENNINGS_BACK_NECK_LOCATION_ID',
         slackChannelVar: 'SLACK_CHANNEL_ID_JENNINGS_BACK_NECK',
       },
@@ -270,17 +275,26 @@ export class ClientConfigManager {
       // client, derive the client's env prefix and pick up every
       // <PREFIX>_SMS_LINK[_<KEY>]_URL / _MESSAGE pair — same naming the
       // outbound server uses, so the identical env vars work here.
-      const smsPrefix = clientDef.assistantIdVar.replace(/_ASSISTANT_ID$/, '');
-      const smsLinkPattern = new RegExp(`^${smsPrefix}_SMS_LINK_(?:(.+)_)?(URL|MESSAGE)$`);
-      for (const [envKey, envValue] of Object.entries(process.env)) {
-        if (!envValue) continue;
-        const match = smsLinkPattern.exec(envKey);
-        if (!match) continue;
-        const linkKey = (match[1] || 'DEFAULT').toUpperCase();
-        if (match[2] === 'URL') {
-          config.smsLinkUrls = { ...config.smsLinkUrls, [linkKey]: envValue };
-        } else {
-          config.smsLinkMessages = { ...config.smsLinkMessages, [linkKey]: envValue };
+      // Two prefixes are accepted: the client's name and its assistantIdVar
+      // prefix. They usually match, but some clients carry a legacy var name
+      // (Jennings is THIRD_CLIENT_*), and naming the env var after the legacy
+      // prefix instead of the clinic is a silent-failure trap. The
+      // assistantIdVar prefix wins if both are set.
+      const namePrefix = clientDef.name.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+      const varPrefix = clientDef.assistantIdVar.replace(/_ASSISTANT_ID$/, '');
+
+      for (const smsPrefix of [...new Set([namePrefix, varPrefix])]) {
+        const smsLinkPattern = new RegExp(`^${smsPrefix}_SMS_LINK_(?:(.+)_)?(URL|MESSAGE)$`);
+        for (const [envKey, envValue] of Object.entries(process.env)) {
+          if (!envValue) continue;
+          const match = smsLinkPattern.exec(envKey);
+          if (!match) continue;
+          const linkKey = (match[1] || 'DEFAULT').toUpperCase();
+          if (match[2] === 'URL') {
+            config.smsLinkUrls = { ...config.smsLinkUrls, [linkKey]: envValue };
+          } else {
+            config.smsLinkMessages = { ...config.smsLinkMessages, [linkKey]: envValue };
+          }
         }
       }
 
@@ -320,6 +334,9 @@ export class ClientConfigManager {
         // Copy optional properties only if they exist
         if (premierConfig.calendarId) {
           aliasConfig.calendarId = premierConfig.calendarId;
+        }
+        if (premierConfig.callbackCalendarId) {
+          aliasConfig.callbackCalendarId = premierConfig.callbackCalendarId;
         }
         if (premierConfig.locationId) {
           aliasConfig.locationId = premierConfig.locationId;
@@ -363,6 +380,7 @@ export class ClientConfigManager {
           ghlApiKey: premierConfig.ghlApiKey,
         };
         if (premierConfig.calendarId) inboundConfig.calendarId = premierConfig.calendarId;
+        if (premierConfig.callbackCalendarId) inboundConfig.callbackCalendarId = premierConfig.callbackCalendarId;
         if (premierConfig.locationId) inboundConfig.locationId = premierConfig.locationId;
         if (premierConfig.slackChannelId) inboundConfig.slackChannelId = premierConfig.slackChannelId;
         if (premierConfig.smsLinkUrls) inboundConfig.smsLinkUrls = premierConfig.smsLinkUrls;
